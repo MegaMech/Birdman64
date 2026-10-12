@@ -19,15 +19,54 @@ behind `cfg(target_os = "android")`, the same way the Windows and Linux splits w
 - **Linux platform code:** `mmap(MAP_FIXED_NOREPLACE)` stacks and window, the signal
   crash tracer (register names need arm64 variants: PC/SP instead of RIP/RSP).
 
-## Address space: always the game module, loaded dynamically at a chosen range
+## Address space
 
 The C needs every C-visible address to be < 4 GB with bit 31 set (native-build.md §2
-option C). An Android app is a PIE `.so` (`libmain.so`) mapped at a random high
-address, so the static-link layout (whole exe at 0xC0000000) can't work. Android
-always uses the first-run layout (first-run-build.md): the Rust host is a normal PIC
-`.so` anywhere, and the C is a separate game module in the low range.
+option C). This comes from the C's data model, not from linking: display lists, ROM
+structs, the allocator and the filesystem hold addresses in 32-bit fields, there are
+39 literal `0x80xxxxxx` addresses, and `(u32)p & 0x80000000` decides RAM vs ROM
+offset. The heap, stacks and framebuffers are bound by this as much as code and
+globals, so dynamic linking alone doesn't remove it.
 
-**Dynamic linking:** yes, but the loader must not choose the address.
+Two ways forward:
+
+| | Reserved low range (option C on Android) | 64-bit pointers (option A) |
+|---|---|---|
+| Idea | Keep the current model; reserve 0x80000000..0xC0000000 at startup, load the module into it | C uses real pointers; RDRAM is a block allocated anywhere |
+| Work | Small: arm64 thunks, reservation, `android_dlopen_ext` | A few weeks (list below) |
+| Risk | ART keeps its heap/boot image in the low 4 GB; the range (1 GB of address space, not RAM) may be taken on some devices or versions | Hidden pointer-in-u32 sites the compiler can't flag |
+| Unlocks | Android only, maybe | Android, macOS, iOS; drops the fixed exe base, reservations and module base on every platform |
+
+**Recommendation: option A**, done first on desktop, where today's build is a
+bit-identical reference (frame dumps, sweeps). A low reservation in a process ART
+already manages is too fragile to rely on across devices.
+
+### Option A work list (from the §2 hazard inventory)
+
+1. ~160 compiler-flagged int↔pointer sites (now zero-extending `PW64_U32`/`PW64_PTR`)
+   → real `uintptr_t`/pointers.
+2. 39 literal RDRAM addresses → `rdram_base + offset` (one host allocation, anywhere).
+3. `_uvMemAlloc` (returns `s32`), filesystem `dataInfo->address`, the memory map,
+   `gGfxFbPtrs`, `uvFileReadHeader(s32)` → 64-bit.
+4. ROM vs RAM bit-31 test (memory.c, filesystem.c) → explicit flag or range check.
+5. Display lists: widen `Gfx` to 16 bytes (SM64-port style) or keep 32-bit
+   **offsets** that the renderer adds a base to. Convert ROM dlists on load (UVTX
+   `setimg` patching, `OS_PHYSICAL_TO_K0` sites in texture/geometry/sprite.c).
+6. ROM structs with pointer slots (ParsedUVEN, UnkUVMD_24, font `Bitmap[]`, audio
+   `alBnkfNew`/`alSeqFileNew` in-place patching) → layout-aware loaders, which mostly
+   exist already for endianness.
+7. Rust side: the SP/audio emulation (`hle.rs`, Acmd addresses), the `pw64-gfx`
+   `Memory` mapping and `OSTask` reads → base translation. Re-check `pw64-kernel`
+   ports that touch addresses.
+8. Verification: frame-dump and audio-WAV identity against the option C build,
+   full gameplay sweep. Raw `sizeof` copies and arithmetic on stored addresses are
+   the sites to expect bugs in.
+
+With option A, Android still loads the game as a module (first-run layout), but with
+a plain `dlopen` at any address. The rest of this section describes the option C
+path, kept for reference.
+
+**Dynamic linking under option C:** yes, but the loader must not choose the address.
 - `android_dlopen_ext` with `ANDROID_DLEXT_RESERVED_ADDRESS` (API 21+) loads a
   normal PIC `.so` into a range we `mmap`-reserve first, e.g. 0xB0000000. It's still
   ordinary dynamic loading: the bionic linker applies relocations and
@@ -85,9 +124,10 @@ always uses the first-run layout (first-run-build.md): the Rust host is a normal
 
 ## Order
 
-1. **aarch64 Linux** (Raspberry Pi 5 / ARM CI runner): proves the C on arm64, the arm64
-   thunks, the coroutine stacks and the module loader with no Android tooling. All of
-   it is reused on Android.
-2. **Android, pad only, module built on desktop:** proves the low reservation, wgpu,
-   cpal and the lifecycle.
-3. **On-device build, touch controls, SAF ROM picker:** usable by beginners.
+1. **Option A on desktop** (Windows/Linux x86_64), verified bit-identical against the
+   current build.
+2. **aarch64 Linux** (Raspberry Pi 5 / ARM CI runner): proves the C on arm64, the
+   coroutine stacks and the module loader with no Android tooling. All of it is reused
+   on Android.
+3. **Android, pad only, module built on desktop:** proves wgpu, cpal and the lifecycle.
+4. **On-device build, touch controls, SAF ROM picker:** usable by beginners.
