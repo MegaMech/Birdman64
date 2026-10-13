@@ -364,6 +364,13 @@ PW64_NO_INPUT=1 PW64_NO_AUDIO=1 PW64_AUDIO_VIRTUAL=1` (host CPU: laptop i7/RTX 3
   `font.c` stores `pw64_hud_anchor` per message and re-emits it there. Anchor back to C after the HUD, so menus,
   briefing and results are untouched.
 
+- **Split-screen HUD** (`DrawCall::split`, `Renderer::split_placement`): G_NOOP "PWS"+`X`/`Y` (rect in w0's
+  low 24 bits: `a<<12|b`, x then top-down rows; `0` = off) tags draws with their view. Non-Extend draws map
+  `Wide::SUBSCREEN` into the view: uniform k = view_h/214 (≤ 1:1) per axis at the `Anchor`/`VAnchor`;
+  `Stretch` fills spanning the subscreen stretch onto the view; full-screen scissors become the view, others
+  move, all clipped to it. The view takes the Hor+ width when it spans `MAIN_VIEW`. `split: None` = old path
+  (stripped from the identity hash like `hud: false`).
+
 ## Fill screen (`PW64_FILL_SCREEN`)
 Option: remove the game's own black bars around world views (flight, demo, replay, title, class summary,
 briefing, results, credits) by showing the 3D there too; HUD moves to the true top/bottom edges. Name it
@@ -427,7 +434,9 @@ covering/cropping the bar rows):
   projection-relative, independent of bars/Hor+. Keep it that way: a wider photo would show things scoring
   never considered.
 - Per-object projections (dobj `unk34 & 2`) stay 4:3 (as Hor+). Snow (snow.c: fb indexes, x ±150, z −102..112
-  around row 120) stays inside the old view (possible follow-up: snow.c.patch z bounds −119..120 with fill).
+  around row 120 = the 10..310 × 8..222 view) is drawn as an overlay task (`fb_overlay`: keeps the margins
+  and `filled`) whose flakes are `Stretch`ed from that view onto the output (`pixels::place_in_view`; rows only
+  onto a `filled` fb). Snow is screen-space noise (200 px focal, not the projection), so the stretch is invisible.
 - Game logic: searched `viewY0/1`, `gGfxViewY*`, `SUBSCREEN_*`, `clipY*`, `camera->aspect` (written, never read):
   only clears/fades/bars, culling, snow, the gyro reticle (projection-based), camera near-probe
   (`camera_802D4514`, collision), photo scoring (projection-based). Nothing reads what the bars hide. Low risk.

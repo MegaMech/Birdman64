@@ -40,6 +40,18 @@ pub struct Game {
     pub widescreen_aspect: *mut f32,
     /// `pw64_fill_screen` (pw64_widescreen.c): fill screen flag.
     pub fill_screen: *mut i32,
+    /// `pw64_split` (pw64_split.c): split-screen layout, 0 = off.
+    pub split: *mut i32,
+    /// `pw64_split_collide` (pw64_collide.c): pilot collisions, 0 = off.
+    pub split_collide: *mut i32,
+    /// `pw64_split_layout` (pw64_split.c): 0 top/bottom, 1 left/right.
+    pub split_layout: *mut i32,
+    /// `pw64_split_share` (pw64_split.c): share the best score, 0 = off.
+    pub split_share: *mut i32,
+    /// `pw64_split_req` (pw64_split.c): pending live switch, -1 = none.
+    pub split_req: *mut i32,
+    /// `pw64_split_hint` (pw64_split.c): 1 = player 2 has no controller.
+    pub split_hint: *mut i32,
     /// `D_802B892C` (memory.c): the sample global memmap checks.
     pub sample_global: *const u32,
     /// `[start, end)` of the module image.
@@ -152,6 +164,12 @@ fn bind_module(h: *mut c_void, path: &Path) -> Result<(), String> {
             ),
             widescreen_aspect: sym(c"pw64_widescreen_aspect")?.cast(),
             fill_screen: sym(c"pw64_fill_screen")?.cast(),
+            split: sym(c"pw64_split")?.cast(),
+            split_collide: sym(c"pw64_split_collide")?.cast(),
+            split_layout: sym(c"pw64_split_layout")?.cast(),
+            split_share: sym(c"pw64_split_share")?.cast(),
+            split_req: sym(c"pw64_split_req")?.cast(),
+            split_hint: sym(c"pw64_split_hint")?.cast(),
             sample_global: sym(c"D_802B892C")?.cast(),
             range,
         };
