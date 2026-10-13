@@ -20,6 +20,11 @@ Holiday Island at 1080p, 16:9, 8x MSAA.
 
 ![A hang glider banking over the coast in a widescreen view](https://github.com/NoahVl/Birdman64/releases/download/media/hero.jpg)
 
+Two-player split-screen: both players fly the same test at once, each with
+their own controller, HUD and score.
+
+![Two gyrocopters in side-by-side split-screen over Holiday Island](https://github.com/NoahVl/Birdman64/releases/download/media/split-screen.jpg)
+
 The original 4:3 image (left) and Birdman64 at 16:9 (right). Widescreen shows
 more of the world instead of stretching it.
 
@@ -133,6 +138,8 @@ button printed B is the N64 A):
 
 ## Features
 
+- Two-player split-screen (top/bottom or side by side) with every vehicle,
+  bonus game and Free flight; pick 2 Players on the title menu
 - Widescreen by default on wide monitors (any ratio up to 21:9, menu
   backgrounds stay 4:3 by design); fill the screen without letterbox bars
 - Window, borderless fullscreen or exclusive fullscreen with a chosen video
