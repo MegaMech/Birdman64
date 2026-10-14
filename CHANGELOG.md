@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Linux: `linux_window` setting in `pw64.toml` (`auto`, `wayland` or `x11`)
   to choose between a native Wayland window and X11 (XWayland).
+- Two new Display & graphics options, both off by default and applied after a
+  restart: Infinite LOD draws every model at full detail however far away, and
+  Infinite view distance lets you see the whole island instead of the haze
+  about 2 km out (it can lower the frame rate, more so in split-screen).
+  Contributed by djultra64.
 
 ### Changed
 
