@@ -1,28 +1,24 @@
-## What's new in 1.4.0
+## What's new in 1.4.1
 
-**Android (experimental):** Birdman64 now runs on 64-bit Android phones (Android 8+) as a
-sideloaded APK, with on-screen touch controls. It is early: tested on one phone so far,
-please report problems.
+**Android:** no more copying the ROM by hand — on first start, the game's opening
+screen offers **"Choose a game file"**, which opens your phone's normal file browser.
+Pick your Pilotwings 64 (US) file from wherever it is (Downloads, Drive, USB) and
+it is copied into the app's storage and remembered: every later launch starts
+straight away. A wrong file says why, and you can pick again.
 
 ### Added
 
-- Android (arm64, experimental): a sideloadable APK with on-screen touch controls, which
-  you can move or hide from the pause menu. Bring your own ROM; the first launch builds
-  the game on the phone (needs internet once).
-- Linux on 64-bit ARM (aarch64): the game now builds and runs from source.
-
-### Fixed
-
-- Very short button taps (shorter than one game frame) are no longer lost.
-- Stray red dots under the altitude readout and slight edge smudges on the medal icons
-  on the results screens are gone.
+- Android: choose the ROM with the system file picker on first start (or whenever
+  the ROM is missing); the choice is remembered across launches. No storage
+  permission is needed.
 
 **Windows:** download `Birdman64-windows-x64.zip`. **Linux:** download the `.AppImage`.
 
 **Android (experimental):** sideload `Birdman64-android-arm64.apk` (64-bit phones,
-Android 8+), start it once, then copy your ROM into `Android/data/app.birdman64/files/rom/`
-on the phone and start it again. The first launch builds the game on the phone (internet
-needed once, about 240 MB installed). Later APKs install over it and keep your saves.
+Android 8+) and start it. The first launch builds the game on the phone (internet
+needed once, about 240 MB installed), then tap **Choose a game file** and pick your
+ROM. Prefer copying the file yourself? `Android/data/app.birdman64/files/rom/`
+still works too. Later APKs install over it and keep your saves.
 
 You need your own Pilotwings 64 (US) ROM.
 

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-17
+
 ### Added
 
 - Android: choose the ROM with the system file picker. On first start, tap
