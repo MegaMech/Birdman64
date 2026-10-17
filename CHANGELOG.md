@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Android: picking the ROM from some storage apps could close the app
+  instead of falling back to a default file name.
+
 ## [1.4.1] - 2026-10-17
 
 ### Added

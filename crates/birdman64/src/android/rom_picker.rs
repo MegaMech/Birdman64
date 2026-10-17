@@ -264,8 +264,16 @@ fn read_document_inner(
 }
 
 /// The document's display name (`OpenableColumns.DISPLAY_NAME`), as the
-/// player knows the file. `None`: the query found nothing useful.
+/// player knows the file. `None`: the query found nothing useful. Any
+/// exception a failed call left pending is cleared: the caller makes more
+/// JNI calls, and calling into JNI with one pending aborts under CheckJNI.
 fn display_name(env: &mut Env, cr: &JObject, uri: &JObject) -> Option<String> {
+    let name = display_name_inner(env, cr, uri);
+    env.exception_clear();
+    name
+}
+
+fn display_name_inner(env: &mut Env, cr: &JObject, uri: &JObject) -> Option<String> {
     let null = JObject::null();
     let projection = env
         .new_object_array(1, jni_str!("java/lang/String"), null)
@@ -318,9 +326,8 @@ fn display_name(env: &mut Env, cr: &JObject, uri: &JObject) -> Option<String> {
             name = s.try_to_string(env).ok();
         }
     }
+    // close can throw; display_name clears it, nothing of ours depends on it.
     let _ = env.call_method(&cursor, jni_str!("close"), jni_sig!("()V"), &[]);
-    // close can throw IOException; nothing of ours depends on it.
-    env.exception_clear();
     name.filter(|n| !n.trim().is_empty())
 }
 
