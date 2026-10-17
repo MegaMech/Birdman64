@@ -38,6 +38,11 @@ A test briefing at 16:9.
 
 ![Test briefing screen at 16:9](https://github.com/NoahVl/Birdman64/releases/download/media/briefing.jpg)
 
+On Android (experimental): the same game on your phone, with on-screen
+controls. The phone builds the game itself on first start.
+
+![Flying the hang glider on a phone with the on-screen touch controls](https://github.com/NoahVl/Birdman64/releases/download/media/android.jpg)
+
 <details>
 <summary>More screenshots: controls and first-time setup</summary>
 
