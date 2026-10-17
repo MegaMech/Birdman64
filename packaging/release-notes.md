@@ -1,14 +1,21 @@
-## What's new in 1.3.0
+## What's new in 1.4.0
+
+**Android (experimental):** Birdman64 now runs on 64-bit Android phones (Android 8+) as a
+sideloaded APK, with on-screen touch controls. It is early: tested on one phone so far,
+please report problems.
 
 ### Added
 
-- Performance overlay (Pause menu > Performance overlay): a small corner readout
-  that works in fullscreen. The FPS counter is on its own; frame time, 1% lows,
-  a frame-time graph, CPU load (busiest core), GPU load and the screen corner
-  are each optional. The old "Show FPS" option is now the counter here.
-- Texture packs without command-line setup: put a pack folder in the new
-  `packs` folder (Settings > Display & graphics > "Open texture packs
-  folder"), pick it under "Texture pack" and restart.
+- Android (arm64, experimental): a sideloadable APK with on-screen touch controls, which
+  you can move or hide from the pause menu. Bring your own ROM; the first launch builds
+  the game on the phone (needs internet once).
+- Linux on 64-bit ARM (aarch64): the game now builds and runs from source.
+
+### Fixed
+
+- Very short button taps (shorter than one game frame) are no longer lost.
+- Stray red dots under the altitude readout and slight edge smudges on the medal icons
+  on the results screens are gone.
 
 **Windows:** download `Birdman64-windows-x64.zip`. **Linux:** download the `.AppImage`.
 

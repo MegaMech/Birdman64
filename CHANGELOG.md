@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-17
+
 ### Added
 
 - Android (arm64, experimental): a sideloadable APK with on-screen touch controls, which
@@ -139,7 +141,8 @@ First public release.
   tar.gz, with checksums and build provenance attestations.
 - `--version`, and crash reports written to `crash.log` in the data folder.
 
-[Unreleased]: https://github.com/NoahVl/Birdman64/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/NoahVl/Birdman64/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/NoahVl/Birdman64/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/NoahVl/Birdman64/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/NoahVl/Birdman64/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/NoahVl/Birdman64/compare/v1.0.2...v1.1.0
