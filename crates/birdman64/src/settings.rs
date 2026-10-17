@@ -122,6 +122,8 @@ enum Row {
     Resume,
     /// Main: open the Graphics page.
     Graphics,
+    /// Main: open the Performance overlay page.
+    PerfPage,
     /// Graphics: stage the built-in defaults and apply the live ones.
     ResetGraphics,
     /// Open the Controls page (Main page).
@@ -159,10 +161,20 @@ enum Page {
     Graphics,
     Controls,
     Split,
+    /// The performance overlay (`perf.rs`): what it shows and where.
+    Perf,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Opt {
+    /// Performance overlay page: frame time, graph, 1% lows, CPU, GPU, corner
+    /// (all live; `perf::set_cfg` from `apply_live`).
+    PerfFrametime,
+    PerfGraph,
+    PerfLows,
+    PerfCpu,
+    PerfGpu,
+    PerfCorner,
     Msaa,
     Scale,
     Filter,
@@ -381,8 +393,11 @@ pub struct Overlay {
     /// OLED care (O3, live): the HUD drifts and dims by these.
     oled_drift: bool,
     oled_brightness: f32,
-    /// U25 (live): the window title shows the frame rate.
+    /// U25 (live): the performance overlay's FPS counter (and the frame rate
+    /// in the window title).
     show_fps: bool,
+    /// The overlay's extras (live); `fps` mirrors `show_fps` in `perf_cfg`.
+    perf: crate::perf::Cfg,
     /// U26 (live): pause when the window loses focus / the last pad
     /// disconnects (Main page row).
     pause_background: bool,
@@ -530,6 +545,7 @@ impl Overlay {
             oled_drift: opts::oled_drift(),
             oled_brightness: opts::oled_brightness(),
             show_fps: opts::show_fps(),
+            perf: crate::perf::cfg(),
             pause_background: opts::pause_in_background(),
             ble: crate::ble::is_on(),
             saved_toast: None,
@@ -583,6 +599,7 @@ impl Overlay {
         self.oled_brightness = gpu.oled_brightness;
         // U25/U26 live rows stage from the window too.
         self.show_fps = gpu.show_fps;
+        self.perf = crate::perf::cfg();
         self.pause_background = gpu.pause_background;
         // BLE pads (live): the switch as it stands.
         self.ble = crate::ble::is_on();
@@ -1153,6 +1170,7 @@ impl Overlay {
         gpu.oled_brightness = self.oled_brightness;
         // U25/U26: live rows the window reads itself.
         gpu.show_fps = self.show_fps;
+        crate::perf::set_cfg(self.perf_cfg());
         gpu.pause_background = self.pause_background;
         // Frame rate and V-Sync are live: the window recomputes the present
         // rate + mode (`present_dirty` → `App::apply_present`).
@@ -1160,6 +1178,15 @@ impl Overlay {
             gpu.fps = self.fps[self.fps_sel];
             gpu.vsync = self.vsync;
             gpu.present_dirty = true;
+        }
+    }
+
+    /// The staged overlay options as `perf` reads them (the counter is the
+    /// separate `show_fps` row).
+    fn perf_cfg(&self) -> crate::perf::Cfg {
+        crate::perf::Cfg {
+            fps: self.show_fps,
+            ..self.perf
         }
     }
 
@@ -1177,6 +1204,7 @@ impl Overlay {
             Page::Controls => "Controls",
             Page::Graphics => "Display & graphics",
             Page::Split => "Split-screen",
+            Page::Perf => "Performance overlay",
         };
         // The wide Controls page (U9): with room for both, the binding list
         // scrolls on the left and the controller drawing sits fixed on the
@@ -1255,6 +1283,7 @@ impl Overlay {
                 Row::Controls,
                 Row::SplitScreen,
                 Row::Graphics,
+                Row::PerfPage,
                 Row::Opt(Opt::Volume),
                 // U26: pause when the window goes to the background.
                 Row::Opt(Opt::PauseBackground),
@@ -1269,8 +1298,6 @@ impl Overlay {
                     Row::Opt(Opt::FillScreen),
                     Row::Opt(Opt::Fps),
                     Row::Opt(Opt::Vsync),
-                    // U25: the frame rate in the window title.
-                    Row::Opt(Opt::ShowFps),
                     Row::Opt(Opt::Scale),
                     Row::Opt(Opt::Filter),
                     Row::Opt(Opt::TexFilter),
@@ -1329,6 +1356,18 @@ impl Overlay {
                 Row::Opt(Opt::ShareScores),
                 Row::Back,
             ],
+            // Performance overlay: the counter first (the simple case), then
+            // the opt-in extras.
+            Page::Perf => vec![
+                Row::Opt(Opt::ShowFps),
+                Row::Opt(Opt::PerfFrametime),
+                Row::Opt(Opt::PerfLows),
+                Row::Opt(Opt::PerfGraph),
+                Row::Opt(Opt::PerfCpu),
+                Row::Opt(Opt::PerfGpu),
+                Row::Opt(Opt::PerfCorner),
+                Row::Back,
+            ],
         }
     }
 
@@ -1364,6 +1403,7 @@ impl Overlay {
                 self.text_row(ui, at(Row::Controls), "Controls \u{203a}");
                 self.text_row(ui, at(Row::SplitScreen), "Split-screen \u{203a}");
                 self.text_row(ui, at(Row::Graphics), "Display & graphics \u{203a}");
+                self.text_row(ui, at(Row::PerfPage), "Performance overlay \u{203a}");
                 self.opt_row(ui, at(Row::Opt(Opt::Volume)), Opt::Volume);
                 self.opt_row(ui, at(Row::Opt(Opt::PauseBackground)), Opt::PauseBackground);
                 self.text_row(ui, at(Row::OpenSaveFolder), "Open save folder");
@@ -1419,7 +1459,6 @@ impl Overlay {
                     Opt::FillScreen,
                     Opt::Fps,
                     Opt::Vsync,
-                    Opt::ShowFps,
                     Opt::Scale,
                     Opt::Filter,
                     Opt::TexFilter,
@@ -1525,6 +1564,15 @@ impl Overlay {
                         Row::Opt(o) => self.opt_row(ui, at(row), o),
                         Row::P2Assign => self.p2_assign_row(ui, at(row)),
                         _ => {}
+                    }
+                }
+                ui.add_space(4.0);
+                self.text_row(ui, at(Row::Back), "\u{2039} Back");
+            }
+            Page::Perf => {
+                for row in self.rows() {
+                    if let Row::Opt(o) = row {
+                        self.opt_row(ui, at(row), o);
                     }
                 }
                 ui.add_space(4.0);
@@ -1832,10 +1880,16 @@ impl Overlay {
                 "",
             ),
             Opt::ShowFps => (
-                "Show FPS",
+                "FPS counter",
                 if self.show_fps { "On" } else { "Off" }.into(),
                 "",
             ),
+            Opt::PerfFrametime => ("Frame time", on_off(self.perf.frametime), ""),
+            Opt::PerfLows => ("1% lows", on_off(self.perf.lows), ""),
+            Opt::PerfGraph => ("Frame-time graph", on_off(self.perf.graph), ""),
+            Opt::PerfCpu => ("CPU core load", on_off(self.perf.cpu), ""),
+            Opt::PerfGpu => ("GPU load", on_off(self.perf.gpu), ""),
+            Opt::PerfCorner => ("Position", self.perf.corner.label().into(), ""),
             Opt::PauseBackground => (
                 "Pause when in the background",
                 if self.pause_background { "On" } else { "Off" }.into(),
@@ -2011,6 +2065,7 @@ impl Overlay {
             Row::Controls => self.enter_page(Page::Controls, Row::Controls),
             Row::SplitScreen => self.enter_page(Page::Split, Row::SplitScreen),
             Row::Graphics => self.enter_page(Page::Graphics, Row::Graphics),
+            Row::PerfPage => self.enter_page(Page::Perf, Row::PerfPage),
             // U15: the save/data folder in the OS file manager.
             Row::OpenSaveFolder => crate::paths::open_in_file_manager(crate::paths::data_dir()),
             // The texture packs folder: created when missing (the Texture
@@ -2204,6 +2259,12 @@ impl Overlay {
                 }
                 Opt::OledDrift => self.oled_drift = !self.oled_drift,
                 Opt::ShowFps => self.show_fps = !self.show_fps,
+                Opt::PerfFrametime => self.perf.frametime = !self.perf.frametime,
+                Opt::PerfLows => self.perf.lows = !self.perf.lows,
+                Opt::PerfGraph => self.perf.graph = !self.perf.graph,
+                Opt::PerfCpu => self.perf.cpu = !self.perf.cpu,
+                Opt::PerfGpu => self.perf.gpu = !self.perf.gpu,
+                Opt::PerfCorner => self.perf.corner = self.perf.corner.step(d),
                 Opt::PauseBackground => self.pause_background = !self.pause_background,
                 // Set by an env var, or no controller input at all: the row
                 // is disabled and shows why (`ble_status_lines`).
@@ -2234,7 +2295,8 @@ impl Overlay {
             | Row::OpenPacksFolder
             | Row::RestartNow => {}
             // Neither do Resume / the page-open rows / Reset to defaults.
-            Row::Resume | Row::Graphics | Row::SplitScreen | Row::ResetGraphics => {}
+            Row::Resume | Row::Graphics | Row::PerfPage | Row::SplitScreen | Row::ResetGraphics => {
+            }
         }
     }
 
@@ -2270,8 +2332,6 @@ impl Overlay {
         // OLED care (O3): the built-in defaults.
         self.oled_drift = false;
         self.oled_brightness = 1.0;
-        // U25: the built-in default (plain title).
-        self.show_fps = false;
         // Display mode Window (the built-in default): applying it leaves an
         // exclusive fullscreen, so the resolution goes back to the desktop
         // choice too (staged; applying it would start the keep-it countdown).
@@ -2331,6 +2391,7 @@ impl Overlay {
             oled_brightness: Some(self.oled_brightness),
             // U25/U26: the live rows the window keeps (`apply_live`).
             show_fps: Some(self.show_fps),
+            perf: Some(self.perf),
             pause_in_background: Some(self.pause_background),
             // BLE pads (live). An env-set value can't change here, so it is
             // never saved (`changed_since`).
@@ -2643,6 +2704,10 @@ fn p2_select(choices: &[P2Choice], pads: &[String], saved: &input::P2Input) -> u
     choices.iter().position(|c| c.input == *saved).unwrap_or(0)
 }
 
+fn on_off(v: bool) -> String {
+    if v { "On" } else { "Off" }.into()
+}
+
 /// Texture pack choices — Off, then the pack folders in the data dir's
 /// `packs/` folder (`packs::list_packs`, read once at creation) — and the
 /// index of the running one. A configured pack that isn't in the folder
@@ -2693,6 +2758,7 @@ fn changed_since(s: config::SavedSettings, snap: &config::SavedSettings) -> conf
         oled_drift: keep(s.oled_drift, &snap.oled_drift),
         oled_brightness: keep(s.oled_brightness, &snap.oled_brightness),
         show_fps: keep(s.show_fps, &snap.show_fps),
+        perf: keep(s.perf, &snap.perf),
         pause_in_background: keep(s.pause_in_background, &snap.pause_in_background),
         ble: keep(s.ble, &snap.ble),
         splitscreen_enabled: keep(s.splitscreen_enabled, &snap.splitscreen_enabled),
@@ -2892,7 +2958,24 @@ fn help(row: Row) -> &'static str {
                 "Dims the flight HUD so an OLED screen wears less. Full brightness is the \
                  original look."
             }
-            Opt::ShowFps => "Shows the frame rate in the window title.",
+            Opt::ShowFps => "A small frame-rate counter in the corner of the screen.",
+            Opt::PerfFrametime => "Adds how long the last frame took, in milliseconds.",
+            Opt::PerfLows => {
+                "Adds the 1% low: the frame rate of the slowest frames. Low numbers mean \
+                 stutter even when the average looks fine."
+            }
+            Opt::PerfGraph => {
+                "A tiny graph of recent frame times. Spikes are stutters; green is smooth."
+            }
+            Opt::PerfCpu => {
+                "How busy the game's busiest thread keeps one processor core. Near 100% means \
+                 the processor is the limit, however many cores you have."
+            }
+            Opt::PerfGpu => {
+                "An estimate of how busy your graphics card is. At 100% the graphics card \
+                 is the limit."
+            }
+            Opt::PerfCorner => "Which corner of the screen the overlay sits in.",
             Opt::PauseBackground => {
                 "Pauses the game when you switch to another window or your last controller \
                  disconnects."
@@ -2926,6 +3009,7 @@ fn help(row: Row) -> &'static str {
         }
         Row::Resume => "Back to the game.",
         Row::Graphics => "Fullscreen, widescreen, frame rate and picture quality.",
+        Row::PerfPage => "A frame-rate counter with optional graph, CPU and GPU load.",
         Row::ResetGraphics => "Puts every option on this page back to its default.",
         Row::Controls => "See and change keyboard and controller buttons.",
         Row::SplitScreen => "Two players on one screen: player 2's controller, layout and rules.",
@@ -3476,6 +3560,12 @@ mod tests {
             splitscreen_collisions: Some(true),
             splitscreen_share: Some(true),
             split_layout: Some("left_right"),
+            perf: Some(crate::perf::Cfg {
+                graph: true,
+                cpu: true,
+                corner: crate::perf::Corner::BottomLeft,
+                ..Default::default()
+            }),
             keyboard: Some(
                 [("A".to_string(), "KeyX".to_string())]
                     .into_iter()
@@ -3513,6 +3603,7 @@ mod tests {
             splitscreen_collisions: Some(false),
             splitscreen_share: Some(false),
             split_layout: Some("top_bottom"),
+            perf: Some(crate::perf::Cfg::default()),
             keyboard: Some(std::collections::BTreeMap::new()),
             gamepad: Some(std::collections::BTreeMap::new()),
         };
@@ -3604,38 +3695,51 @@ mod tests {
         // Main: Resume, the three sub-pages, Volume, the background-pause
         // row, Open save folder, Quit (U2, U3, U15, U26).
         let rows = o.rows();
-        assert_eq!(rows.len(), 8);
+        assert_eq!(rows.len(), 9);
         assert_eq!(rows[0], Row::Resume);
         assert_eq!(rows[1], Row::Controls);
         assert_eq!(rows[2], Row::SplitScreen);
         assert_eq!(rows[3], Row::Graphics);
-        assert_eq!(rows[4], Row::Opt(Opt::Volume));
-        assert_eq!(rows[5], Row::Opt(Opt::PauseBackground));
-        assert_eq!(rows[6], Row::OpenSaveFolder);
-        assert_eq!(rows[7], Row::Quit);
+        assert_eq!(rows[4], Row::PerfPage);
+        assert_eq!(rows[5], Row::Opt(Opt::Volume));
+        assert_eq!(rows[6], Row::Opt(Opt::PauseBackground));
+        assert_eq!(rows[7], Row::OpenSaveFolder);
+        assert_eq!(rows[8], Row::Quit);
+        // The performance overlay page: the counter, the opt-in extras, Back.
+        o.sel = 4;
+        o.confirm();
+        assert_eq!(o.page, Page::Perf);
+        let rows = o.rows();
+        assert_eq!(rows.len(), 8);
+        assert_eq!(rows[0], Row::Opt(Opt::ShowFps));
+        assert_eq!(rows[6], Row::Opt(Opt::PerfCorner));
+        assert_eq!(rows[7], Row::Back);
+        o.back();
+        assert_eq!(o.rows()[o.sel], Row::PerfPage);
         // Confirm on Display & graphics opens the Graphics page: the
-        // thirteen graphics options (incl. Show FPS, U25), the two OLED care
-        // rows, Reset to defaults, and Back (no restart-pending change yet,
-        // so no banner row, U16).
+        // ten graphics options, the texture-pack rows (pack + folder), the two
+        // OLED care rows, Reset to defaults, and Back (no restart-pending
+        // change yet, so no banner row, U16).
         o.sel = 3;
         o.confirm();
         assert_eq!(o.page, Page::Graphics);
         let rows = o.rows();
-        assert_eq!(rows.len(), 19);
+        assert_eq!(rows.len(), 18);
         assert_eq!(rows[0], Row::Opt(Opt::DisplayMode));
-        assert_eq!(rows[6], Row::Opt(Opt::ShowFps));
-        assert_eq!(rows[12], Row::Opt(Opt::Msaa));
-        assert_eq!(rows[13], Row::Opt(Opt::InfiniteLod));
-        assert_eq!(rows[14], Row::Opt(Opt::InfiniteViewDistance));
-        assert_eq!(rows[15], Row::Opt(Opt::OledDrift));
-        assert_eq!(rows[16], Row::Opt(Opt::OledBrightness));
-        assert_eq!(rows[17], Row::ResetGraphics);
-        assert_eq!(rows[18], Row::Back);
+        assert_eq!(rows[9], Row::Opt(Opt::TexturePack));
+        assert_eq!(rows[10], Row::OpenPacksFolder);
+        assert_eq!(rows[11], Row::Opt(Opt::Msaa));
+        assert_eq!(rows[12], Row::Opt(Opt::InfiniteLod));
+        assert_eq!(rows[13], Row::Opt(Opt::InfiniteViewDistance));
+        assert_eq!(rows[14], Row::Opt(Opt::OledDrift));
+        assert_eq!(rows[15], Row::Opt(Opt::OledBrightness));
+        assert_eq!(rows[16], Row::ResetGraphics);
+        assert_eq!(rows[17], Row::Back);
         // Stage a restart-only change: the banner's "Restart now" row (U16)
         // appears first, right under the banner.
         o.msaa = 4;
         let rows = o.rows();
-        assert_eq!(rows.len(), 20);
+        assert_eq!(rows.len(), 19);
         assert_eq!(rows[0], Row::RestartNow);
         // Back (B / Escape / the Back row) returns to Main, selection on
         // the row that opened it.
