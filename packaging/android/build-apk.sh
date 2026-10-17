@@ -102,10 +102,15 @@ sign_apk() {
     if [ "$3" = release ] && [ -n "${ANDROID_CERT_SHA256:-}" ]; then
         local want got
         want=$(printf '%s' "$ANDROID_CERT_SHA256" | tr -d ': ' | tr 'A-F' 'a-f')
-        got=$("$BT/apksigner$BAT" verify --print-certs "$out" |
-            sed -n 's/^Signer #1 certificate SHA-256 digest: *//p' | tr -d ': \r' | tr 'A-F' 'a-f')
+        # The label differs between build-tools versions ("Signer #1 ..." or
+        # "Signer (minSdkVersion=..., ...) ..."), so match any signer line.
+        certs=$("$BT/apksigner$BAT" verify --print-certs "$out" 2>&1 || true)
+        got=$(printf '%s\n' "$certs" |
+            sed -n 's/^Signer.*certificate SHA-256 digest: *//p' | head -n 1 | tr -d ': \r' | tr 'A-F' 'a-f')
         if [ "$got" != "$want" ]; then
             echo "error: APK signer certificate SHA-256 is '$got', expected '$want'" >&2
+            # Certificate details are public; show them to diagnose a format change.
+            printf '%s\n' "$certs" | grep -i 'certificate' >&2 || true
             rm -f "$out"
             exit 1
         fi
