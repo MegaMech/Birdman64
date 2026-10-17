@@ -1,32 +1,14 @@
-## What's new in 1.2.0
-
-Big thanks to **@djultra64** for contributing the new Infinite LOD and
-Infinite view distance options, a first contribution to Birdman64!
+## What's new in 1.3.0
 
 ### Added
 
-- Linux: `linux_window` setting in `pw64.toml` (`auto`, `wayland` or `x11`)
-  to choose between a native Wayland window and X11 (XWayland).
-- Two new Display & graphics options, both off by default and applied after a
-  restart: Infinite LOD draws every model at full detail however far away, and
-  Infinite view distance lets you see the whole island instead of the haze
-  about 2 km out (it can lower the frame rate, more so in split-screen).
-  Contributed by @djultra64.
-
-### Changed
-
-- The controller's D-pad now moves the stick, so it works in menus and can steer.
-  Rebind any D-pad direction to another button (C buttons, A, ...) under
-  Settings > Controls.
-
-### Fixed
-
-- Linux (Wayland) on laptops with an NVIDIA GPU next to an AMD or Intel one:
-  the picture no longer freezes before the main menu, and the game no longer
-  crashes right after choosing Start game. The game now opens its window
-  through X11 (XWayland) on these laptops.
-- Linux: the first-start ROM tip now names the AppImage (or the birdman64
-  program) instead of Birdman64.exe.
+- Performance overlay (Pause menu > Performance overlay): a small corner readout
+  that works in fullscreen. The FPS counter is on its own; frame time, 1% lows,
+  a frame-time graph, CPU load (busiest core), GPU load and the screen corner
+  are each optional. The old "Show FPS" option is now the counter here.
+- Texture packs without command-line setup: put a pack folder in the new
+  `packs` folder (Settings > Display & graphics > "Open texture packs
+  folder"), pick it under "Texture pack" and restart.
 
 **Windows:** download `Birdman64-windows-x64.zip`. **Linux:** download the `.AppImage`.
 
