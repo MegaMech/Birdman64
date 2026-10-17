@@ -178,7 +178,7 @@ pub fn flags_hash(os: Os) -> String {
 /// must change the key too).
 fn hash_link_list(os: Os) -> Vec<String> {
     let mut link = link_args(os);
-    if os == Os::Linux {
+    if os.is_linux() {
         link.push(LINUX_VERSION_SCRIPT.to_string());
     }
     link
@@ -193,8 +193,23 @@ pub fn flags_hash_host() -> String {
 /// The constant linker argument list (before the map/output/script path
 /// arguments [`build_module`] appends): the Windows `lld-link` invocation
 /// and the Linux `ld.lld` one, `spike_build.sh` step 4. Hashed into the
-/// build key via [`flags_hash`].
+/// build key via [`flags_hash`]. `reloc` feature (option-a.md S7): no fixed
+/// base (Windows: lld-link's DLL defaults, ASLR with high entropy; Linux: no
+/// `--image-base`, ld.so maps it anywhere), so the key differs too.
 pub fn link_args(os: Os) -> Vec<String> {
+    #[cfg(not(feature = "reloc"))]
+    const WIN_BASE: &[&str] = &[
+        "-base:0xB0000000",
+        "-fixed",
+        "-dynamicbase:no",
+        "-highentropyva:no",
+    ];
+    #[cfg(feature = "reloc")]
+    const WIN_BASE: &[&str] = &[];
+    #[cfg(not(feature = "reloc"))]
+    const LINUX_BASE: &[&str] = &["--image-base=0xB0000000"];
+    #[cfg(feature = "reloc")]
+    const LINUX_BASE: &[&str] = &[];
     match os {
         Os::Windows => [
             "lld-link",
@@ -204,10 +219,10 @@ pub fn link_args(os: Os) -> Vec<String> {
             "-nodefaultlib",
             "-machine:x64",
             "-Brepro",
-            "-base:0xB0000000",
-            "-fixed",
-            "-dynamicbase:no",
-            "-highentropyva:no",
+        ]
+        .iter()
+        .chain(WIN_BASE)
+        .chain(&[
             "-opt:ref",
             "-opt:icf",
             "-export:bootproc",
@@ -222,22 +237,32 @@ pub fn link_args(os: Os) -> Vec<String> {
             "-export:pw64_infinite_lod,DATA",
             "-export:pw64_infinite_view_distance,DATA",
             "-export:D_802B892C,DATA",
-        ]
-        .iter()
+            "-export:pw64_vmap,DATA",
+        ])
         .map(|s| s.to_string())
         .collect(),
-        Os::Linux => [
-            "ld.lld",
-            "-shared",
-            "-Bsymbolic",
-            "--eh-frame-hdr",
-            "--image-base=0xB0000000",
-            "-z",
-            "noexecstack",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect(),
+        Os::Linux => ["ld.lld", "-shared", "-Bsymbolic", "--eh-frame-hdr"]
+            .iter()
+            .chain(LINUX_BASE)
+            .chain(&["-z", "noexecstack"])
+            .map(|s| s.to_string())
+            .collect(),
+        // arm64 (Linux and Android) is relocatable only (no fixed-window
+        // build there, option-a.md "Flipping the default"): never an
+        // `--image-base`. Android also rejects text relocations (API 23+);
+        // the -fPIE objects have none.
+        Os::LinuxArm64 => ["ld.lld", "-shared", "-Bsymbolic", "--eh-frame-hdr"]
+            .iter()
+            .chain(&["-z", "noexecstack"])
+            .map(|s| s.to_string())
+            .collect(),
+        // Android 15+ devices may run 16 KB pages: LOAD segments must be
+        // 16 KB aligned or bionic refuses the module (same as the app .so).
+        Os::Android => ["ld.lld", "-shared", "-Bsymbolic", "--eh-frame-hdr"]
+            .iter()
+            .chain(&["-z", "noexecstack", "-z", "max-page-size=16384"])
+            .map(|s| s.to_string())
+            .collect(),
     }
 }
 
@@ -346,7 +371,7 @@ pub fn build_module(
     // 3. Compile every decomp C + our native C in parallel.
     let ext = match host_os() {
         Os::Windows => "obj",
-        Os::Linux => "o",
+        Os::Linux | Os::LinuxArm64 | Os::Android => "o",
     };
     let mut jobs = Vec::new();
     for dir in SRC_DIRS {
@@ -467,7 +492,7 @@ pub fn build_module(
             link_args.push(format!("-map:{}", slash(&map)));
             link_args.push(format!("-out:{}", slash(&library)));
         }
-        Os::Linux => {
+        Os::Linux | Os::LinuxArm64 | Os::Android => {
             // -Bsymbolic + version script: every C symbol binds locally, so
             // the -fPIE objects (identical code to the static Linux build)
             // link into a .so. Nothing stays undefined since T1: the CRT
@@ -586,7 +611,7 @@ pub fn build_module(
 fn library_name() -> &'static str {
     match host_os() {
         Os::Windows => "pw64game.dll",
-        Os::Linux => "libpw64game.so",
+        Os::Linux | Os::LinuxArm64 | Os::Android => "libpw64game.so",
     }
 }
 
@@ -696,12 +721,17 @@ const LINUX_VERSION_SCRIPT: &str = "\
   bootproc; pw64_widescreen_aspect; pw64_fill_screen;
   pw64_split; pw64_split_collide; pw64_split_layout; pw64_split_share; pw64_split_req;
   pw64_split_hint; pw64_infinite_lod; pw64_infinite_view_distance; D_802B892C;
+  pw64_vmap;
   local: *; };";
 
 /// Host target of the build ([`Os`] docs: build scripts run on the host).
 fn host_os() -> Os {
     if cfg!(windows) {
         Os::Windows
+    } else if cfg!(target_os = "android") {
+        Os::Android
+    } else if cfg!(target_arch = "aarch64") {
+        Os::LinuxArm64
     } else {
         Os::Linux
     }

@@ -1,5 +1,6 @@
 //! `dylib` feature: the game C lives in a module built on the player's machine
-//! (docs/notes/first-run-build.md), loaded here at a fixed base below 4 GB.
+//! (docs/notes/first-run-build.md), loaded here at a fixed base below 4 GB
+//! (`reloc` feature: anywhere, a vaddr region at 0xB0000000; option-a.md S7).
 //!
 //! The module (`pw64game.dll` / `libpw64game.so`) has no imports from the
 //! exe: its calls into Rust go through jump slots that [`load`] fills via
@@ -74,6 +75,12 @@ pub fn game() -> &'static Game {
         .expect("game module not loaded (pw64_game::dylib::load)")
 }
 
+/// The loaded module, or `None` before [`load`] (the settings screen's
+/// "any time" switches run in unit tests, which load no module).
+pub fn try_game() -> Option<&'static Game> {
+    GAME.get()
+}
+
 /// `[start, end)` of the module image once loaded, else `None` (no panic).
 pub fn loaded_range() -> Option<(usize, usize)> {
     GAME.get().map(|g| g.range)
@@ -98,7 +105,7 @@ extern "C" fn lookup(name: *const c_char) -> *const c_void {
         .map_or(core::ptr::null(), |(_, f)| f.0)
 }
 
-/// Loads the module at [`DLL_BASE`], checks its ABI string, binds its imports
+/// Loads the module at [`DLL_BASE`] (`reloc`: anywhere), checks its ABI string, binds its imports
 /// and resolves the entry points. Errors are player-facing sentences.
 pub fn load(path: &Path) -> Result<(), String> {
     if GAME.get().is_some() {
@@ -146,7 +153,9 @@ fn bind_module(h: *mut c_void, path: &Path) -> Result<(), String> {
         let (mut start, mut end) = (core::ptr::null(), core::ptr::null());
         range_fn(&mut start, &mut end);
         let range = (start as usize, end as usize);
-        if range.0 != DLL_BASE {
+        // `reloc`: the module is linked without a fixed base and loads
+        // anywhere (memmap::register_regions maps it to 0xB0000000).
+        if !crate::memmap::RELOC_BUILD && range.0 != DLL_BASE {
             return Err(format!(
                 "{} loaded at {:#x}, not {DLL_BASE:#x} (address range taken)",
                 path.display(),
@@ -162,6 +171,7 @@ fn bind_module(h: *mut c_void, path: &Path) -> Result<(), String> {
                 path.display()
             ));
         }
+        let vmap = sym(c"pw64_vmap")?;
         let game = Game {
             bootproc: core::mem::transmute::<*mut c_void, unsafe extern "C-unwind" fn(*mut c_void)>(
                 sym(c"bootproc")?,
@@ -180,6 +190,9 @@ fn bind_module(h: *mut c_void, path: &Path) -> Result<(), String> {
             range,
         };
         let _ = GAME.set(game);
+        // The module's PW64_U32/PW64_PTR fast-path map (it can't read the
+        // exe's); kept in sync by vaddr::set_regions. Nothing runs yet.
+        pw64_platform::vaddr::set_module_vmap(vmap.cast());
         // Crash symbolization (first-run-build.md T14): the tracer prints
         // RIPs inside the module as `pw64game+0x<off>` and logs where its
         // `.map` is. Both spike_build.sh and the builder's cache layout
@@ -266,7 +279,9 @@ mod sys {
     }
 }
 
-#[cfg(target_os = "linux")]
+// Android: the same `dlopen`, from an absolute path in app storage (the
+// module is import-free, so no namespace/library-path setup is involved).
+#[cfg(any(target_os = "linux", target_os = "android"))]
 mod sys {
     use core::ffi::{CStr, c_void};
     use std::os::unix::ffi::OsStrExt;

@@ -50,6 +50,16 @@ typedef __SIZE_TYPE__ size_t;
 #define PW64_THUNK(name)                                                     \
     __asm__(".text\n.globl " #name "\n.def " #name ";.scl 2;.type 32;.endef\n" \
             ".p2align 4\n" #name ":\n\tjmp *pw64_imp_" #name "(%rip)\n");
+#elif defined(__aarch64__)
+/* x16 (IP0) is the AAPCS64 intra-procedure-call scratch register that
+ * linker veneers/PLT stubs use: a callee may not expect it preserved. The
+ * slot is module-local (-Bsymbolic, version script), so adrp/:lo12: reach
+ * it directly with no GOT. */
+#define PW64_THUNK(name)                                                     \
+    __asm__(".text\n.globl " #name "\n.hidden " #name "\n.type " #name        \
+            ",%function\n.p2align 4\n" #name ":\n\tadrp x16, pw64_imp_" #name \
+            "\n\tldr x16, [x16, :lo12:pw64_imp_" #name "]\n\tbr x16\n.size "   \
+            #name ",.-" #name "\n");
 #else
 #define PW64_THUNK(name)                                                     \
     __asm__(".text\n.globl " #name "\n.hidden " #name "\n.type " #name        \
@@ -126,6 +136,18 @@ long long rspbootTextStart[1], rspbootTextEnd[1];
 long long gspFast3DTextStart[1], gspFast3DDataStart[1];
 long long gspF3DEX_fifoTextStart[1], gspF3DEX_fifoDataStart[1];
 long long aspMainTextStart[1], aspMainDataStart[1];
+
+/* PW64_U32/PW64_PTR inline fast path (pw64_native.h, pw64-platform
+ * vaddr.rs `VMap`): the module's own copy, since it cannot read exe data.
+ * Starts as the identity map; the exe writes it (vaddr::set_module_vmap,
+ * exported for that). Keep the layout in sync with pw64_native.h. */
+struct pw64_vmap {
+    __UINTPTR_TYPE__ host;
+    unsigned long long size;
+    unsigned int vbase;
+    unsigned int pad;
+};
+struct pw64_vmap pw64_vmap = {0, 1ULL << 32, 0, 0};
 
 /* --- MSVC CRT pieces the compiler references (no CRT is linked) --- */
 #if defined(_MSC_VER)

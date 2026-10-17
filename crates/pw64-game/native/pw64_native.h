@@ -27,15 +27,46 @@ typedef __SIZE_TYPE__ size_t;
 
 #define PW64_NATIVE 1
 
-/* Pointer-width helpers for the pointer patch set (native-build.md §2).
- * The exe, RDRAM window (0x80000000..) and every other address the C sees
- * lie below 4 GB (asserted by pw64_game::memmap), so a 32-bit int holds any
- * of them losslessly; the only hazard is sign extension of an s32 (`long`)
- * address >= 0x80000000 on its way back to a pointer.
- *   PW64_U32(p): pointer -> 32-bit N64-style address (lossless).
- *   PW64_PTR(a): 32-bit address (s32 or u32) -> pointer, zero-extended. */
-#define PW64_U32(p) ((unsigned int)(__UINTPTR_TYPE__)(p))
-#define PW64_PTR(a) ((void*)(__UINTPTR_TYPE__)(unsigned int)(a))
+/* Pointer-width helpers for the pointer patch set (native-build.md §2,
+ * option-a.md). The C keeps addresses in 32-bit slots ("vaddr": display-list
+ * words, allocator, filesystem, 0x80xxxxxx literals); every conversion goes
+ * through these, which map registered host blocks to their vaddr range
+ * (pw64-platform vaddr.rs). Values in no region (ROM offsets, physical
+ * addresses, small ints in OSMesg) pass through; with no regions registered
+ * (fixed low-4 GB window) both are the identity.
+ *   PW64_U32(p): pointer (or 32-bit int) -> 32-bit vaddr.
+ *   PW64_PTR(a): 32-bit vaddr (s32 or u32) -> host pointer; also for literal
+ *                RDRAM addresses: (u8*)PW64_PTR(0x800DA800).
+ * Inline fast path: one region (`pw64_vmap`, Rust vaddr.rs `VMap`; the
+ * dylib shim defines the module's copy) is tried first; a miss calls Rust.
+ * No regions: the map covers all 2^32 values at host 0 (identity, always
+ * hits, so the fixed-window build never calls out). Not usable in static
+ * initializers. */
+unsigned int pw64_to_vaddr(const void* p);
+void* pw64_to_host(unsigned int a);
+struct pw64_vmap {
+    __UINTPTR_TYPE__ host;
+    unsigned long long size;
+    unsigned int vbase;
+    unsigned int pad;
+};
+extern struct pw64_vmap pw64_vmap;
+static __inline__ unsigned int pw64_u32_fast(__UINTPTR_TYPE__ p) {
+    __UINTPTR_TYPE__ off = p - pw64_vmap.host;
+    if (__builtin_expect(off < pw64_vmap.size, 1)) {
+        return pw64_vmap.vbase + (unsigned int)off;
+    }
+    return pw64_to_vaddr((const void*)p);
+}
+static __inline__ void* pw64_ptr_fast(unsigned int a) {
+    unsigned int off = a - pw64_vmap.vbase;
+    if (__builtin_expect(off < pw64_vmap.size, 1)) {
+        return (void*)(pw64_vmap.host + off);
+    }
+    return pw64_to_host(a);
+}
+#define PW64_U32(p) pw64_u32_fast((__UINTPTR_TYPE__)(p))
+#define PW64_PTR(a) pw64_ptr_fast((unsigned int)(a))
 
 /* Endianness (native-build.md §3, task 6). ROM data is big-endian; scalars
  * read through uvMemRead/uvConsumeBytes(1/2/4) are already converted. Structs

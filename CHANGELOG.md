@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Android (arm64, experimental): a sideloadable APK with on-screen touch controls, which
+  you can move or hide from the pause menu. Bring your own ROM; the first launch builds
+  the game on the phone (needs internet once).
+- Linux on 64-bit ARM (aarch64): the game now builds and runs from source.
+
+### Fixed
+
+- Very short button taps (shorter than one game frame) are no longer lost.
+- Stray red dots under the altitude readout and slight edge smudges on the medal icons
+  on the results screens are gone.
+
 ## [1.3.0] - 2026-10-17
 
 ### Added

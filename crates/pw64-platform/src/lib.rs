@@ -11,6 +11,7 @@
 //! - [`crt`]: CRT replacements bound into the dylib game module (first-run
 //!   build, docs/notes/first-run-build.md).
 //! - [`swap`]: BE→host swaps for ROM structs copied raw (`PW64_SWAP`).
+//! - [`vaddr`]: 32-bit C addresses ↔ host addresses (`PW64_U32`/`PW64_PTR`).
 
 // The `unsafe extern` fns are libultra entry points called from C: their
 // safety contract is libultra's (valid pointers of the documented types).
@@ -25,6 +26,13 @@ pub mod pi;
 pub mod start;
 pub mod stubs;
 pub mod swap;
+pub mod vaddr;
+
+/// `MAP_FIXED_NOREPLACE` (Linux 4.17+; the same value on every arch). The
+/// libc crate leaves it out for Android, whose older kernels take it as a
+/// plain hint: every caller checks the returned address anyway.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub const MAP_FIXED_NOREPLACE: core::ffi::c_int = 0x10_0000;
 
 /// Logs the first call of a placeholder implementation (once per name).
 pub(crate) fn first_call(name: &'static str) {
