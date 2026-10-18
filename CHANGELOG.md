@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- "Unlock everything" in the pause menu: gives a gold medal on every test in
+  both save files, which opens every class, the bonus games and Birdman
+  (on Android it asks you to reopen the app). Your scores are only ever
+  raised, and your previous save is kept as `pw64.eep.before-unlock` in the
+  save folder. "Restore save from before unlock" in the same menu puts that
+  save back.
 - Move your save between PC and Android (or keep a backup): the pause menu has
   "Export save…" and "Import save…". Importing keeps your old save next to it
   as `pw64.eep.before-import` and restarts the game (on Android it asks you to
