@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-18
+
 ### Added
 
 - Early iOS support (iPhone and iPad): full-screen play with on-screen touch

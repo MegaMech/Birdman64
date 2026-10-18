@@ -1,16 +1,46 @@
-## What's new in 1.4.1
+## What's new in 1.5.0
 
-**Android:** no more copying the ROM by hand — on first start, the game's opening
-screen offers **"Choose a game file"**, which opens your phone's normal file browser.
-Pick your Pilotwings 64 (US) file from wherever it is (Downloads, Drive, USB) and
-it is copied into the app's storage and remembered: every later launch starts
-straight away. A wrong file says why, and you can pick again.
+A big one: **move the HUD** anywhere on screen, **export and import your save**
+(PC ↔ Android), an **Unlock everything** cheat, a nicer settings menu on phones,
+and early **iOS** support.
 
 ### Added
 
-- Android: choose the ROM with the system file picker on first start (or whenever
-  the ROM is missing); the choice is remembered across launches. No storage
-  permission is needed.
+- Early iOS support (iPhone and iPad): full-screen play with on-screen touch
+  controls or a paired controller, and the ROM and save in the Files app's
+  Birdman64 folder. iOS builds are unsigned test builds for now (you sign
+  them yourself when sideloading) and not part of the release downloads. As
+  on Android, a save change asks you to reopen the app.
+- "Unlock everything" in the pause menu: gives a gold medal on every test in
+  both save files, which opens every class, the bonus games and Birdman
+  (on Android it asks you to reopen the app). Your scores are only ever
+  raised, and your previous save is kept as `pw64.eep.before-unlock` in the
+  save folder. "Restore save from before unlock" in the same menu puts that
+  save back.
+- Move your save between PC and Android (or keep a backup): the pause menu has
+  "Export save…" and "Import save…". Importing keeps your old save next to it
+  as `pw64.eep.before-import` and restarts the game (on Android it asks you to
+  reopen the app). On Android, "Open save folder" is replaced by these two.
+- Move the HUD: pause menu "Move HUD" lets you drag the flight gauges (speed,
+  timer, radar, altimeter, fuel, photo count, messages, cannonball gauges) and
+  the performance overlay anywhere on screen, by touch or mouse. Reset puts
+  everything back; your layout is saved.
+
+### Changed
+
+- Android/iOS: the touch Z button (take a photo) now sits on the right, next to
+  the C buttons, so you can steer while taking pictures.
+
+### Fixed
+
+- The settings menu keeps its size while you move between rows on a page; it
+  only changes size when you go to another page.
+- Android: the settings lists scroll by dragging with a finger, and a new drag
+  continues from where the list was. The rows are bigger and easier to tap.
+- Android: the Controls page fits the screen, with the controller beside the
+  list, and the close button and dimmed background line up with the screen.
+- Android: picking the ROM from some storage apps could close the app
+  instead of falling back to a default file name.
 
 **Windows:** download `Birdman64-windows-x64.zip`. **Linux:** download the `.AppImage`.
 
