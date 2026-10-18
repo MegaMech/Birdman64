@@ -142,9 +142,9 @@ enum Row {
     /// Graphics: the restart banner's "Restart now" row (U16). Only on the
     /// page while restart-only changes are pending (the banner's row).
     RestartNow,
-    /// Main (Android only): move the on-screen touch controls.
+    /// Main (Android/iOS only): move the on-screen touch controls.
     TouchLayout,
-    /// Main (Android only): on-screen buttons shown / only the menu button.
+    /// Main (Android/iOS only): on-screen buttons shown / only the menu button.
     TouchHidden,
     /// Main: drag the flight-HUD elements and the performance overlay
     /// (`hud_edit.rs`).
@@ -212,14 +212,14 @@ struct PanelKey {
     zoom: f32,
 }
 
+/// Android/iOS: touch-sized rows, no file manager, and an app that can't
+/// relaunch itself.
+const MOBILE: bool = cfg!(any(target_os = "android", target_os = "ios"));
+
 /// The least height the Controls binding list gets under the controller
 /// drawing (about two rows; the rest scrolls). Rows are finger-sized on
-/// Android.
-const MIN_LIST_H: f32 = if cfg!(target_os = "android") {
-    100.0
-} else {
-    64.0
-};
+/// Android/iOS.
+const MIN_LIST_H: f32 = if MOBILE { 100.0 } else { 64.0 };
 /// The smallest body the panel takes (a measurement can come back tiny on a
 /// degenerate first frame; the cap governs on really small screens).
 const MIN_BODY: f32 = 120.0;
@@ -346,13 +346,13 @@ const UNLOCK_BACKUP: &str = ".before-unlock";
 /// The backup of the save a restore replaces (same numbering).
 const RESTORE_BACKUP: &str = ".before-restore";
 /// What follows a save change, in the warnings below ([`reload_command`]).
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 macro_rules! then_reload {
     () => {
         "Birdman64 then restarts."
     };
 }
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 macro_rules! then_reload {
     () => {
         "Then close Birdman64 and open it again."
@@ -950,9 +950,9 @@ impl Overlay {
         std::mem::take(&mut self.quit_requested)
     }
 
-    /// "Move touch controls" was chosen (Android): taken by the window
+    /// "Move touch controls" was chosen (Android/iOS): taken by the window
     /// when the overlay closes, which then keeps the game paused.
-    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    #[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
     pub fn take_touch_edit(&mut self) -> bool {
         std::mem::take(&mut self.touch_edit_requested)
     }
@@ -996,7 +996,7 @@ impl Overlay {
 
     /// Loads a save just replaced on disk (import, Unlock everything,
     /// restore; the game's writes are already frozen): restart with `cmd`
-    /// (U16), or, with `None` (Android, which can't relaunch itself), show
+    /// (U16), or, with `None` (Android/iOS, which can't relaunch), show
     /// the "Close Birdman64" row and leave the player to reopen the app.
     fn reload_saved(&mut self, cmd: Option<std::io::Result<std::process::Command>>) -> Reload {
         let Some(cmd) = cmd else {
@@ -1615,14 +1615,10 @@ impl Overlay {
         // scrolls on the left and the controller drawing sits fixed on the
         // right, vertically centred. Narrower windows stack them: the
         // drawing fixed above the scrolling list.
-        // Android (landscape phones) uses the side-by-side layout from a
+        // Android/iOS (landscape phones) use the side-by-side layout from a
         // lower width: stacked, the drawing left the list a sliver of the
         // short screen. A narrow column scales the drawing, not the list.
-        let wide_min = if cfg!(target_os = "android") {
-            640.0
-        } else {
-            1000.0
-        };
+        let wide_min = if MOBILE { 640.0 } else { 1000.0 };
         let wide = self.page == Page::Controls && screen.width() >= wide_min;
         let width = if wide {
             880.0_f32.min(screen.width() * 0.85)
@@ -1639,7 +1635,7 @@ impl Overlay {
         // (body + `chrome`) at 80% of the (safe) screen height.
         let cap = (0.8 * screen.height() - self.chrome).max(MIN_BODY);
         let body = self.body_h.min(cap);
-        if cfg!(target_os = "android") {
+        if MOBILE {
             // Finger-sized rows with a gap between them, and a wider scroll
             // bar to grab. Rows only react to taps; a drag scrolls the list.
             ctx.style_mut(|s| {
@@ -1753,13 +1749,18 @@ impl Overlay {
                 if !self.restore_available {
                     rows.retain(|&r| r != Row::RestoreUnlock);
                 }
-                // Android: the touch controls' edit mode and the "only
-                // menu" switch, under Controls. Its save folder is private
-                // (no file manager reaches it): export / import replace it.
-                if cfg!(target_os = "android") {
+                // Android/iOS: the touch controls' edit mode and the "only
+                // menu" switch, under Controls. No file manager opens from
+                // the app. Android's save folder is private: export / import
+                // replace it. iOS's is the Files app's Birdman64 folder (the
+                // player copies pw64.eep there), and there is no file dialog.
+                if MOBILE {
                     rows.insert(2, Row::TouchLayout);
                     rows.insert(3, Row::TouchHidden);
                     rows.retain(|r| *r != Row::OpenSaveFolder);
+                    if cfg!(target_os = "ios") {
+                        rows.retain(|r| !matches!(r, Row::ExportSave | Row::ImportSave));
+                    }
                     if self.reopen_pending {
                         rows.insert(rows.len() - 1, Row::CloseApp);
                     }
@@ -3470,9 +3471,10 @@ fn restart_command() -> std::io::Result<std::process::Command> {
 }
 
 /// How [`Overlay::reload_saved`] loads a replaced save: the U16 restart, or
-/// `None` on Android (an app can't relaunch itself; the player reopens it).
+/// `None` on Android/iOS (an app can't relaunch itself; the player reopens
+/// it).
 fn reload_command() -> Option<std::io::Result<std::process::Command>> {
-    (!cfg!(target_os = "android")).then(restart_command)
+    (!MOBILE).then(restart_command)
 }
 
 /// [`Overlay::reload_saved`]'s outcome.
@@ -5191,11 +5193,11 @@ mod tests {
         assert!(o.reopen_pending && !o.restart_requested && o.show);
     }
 
-    /// PC builds restart after a save change; Android has no restart command
-    /// (the player reopens the app).
+    /// PC builds restart after a save change; Android/iOS have no restart
+    /// command (the player reopens the app).
     #[test]
     fn reload_command_per_platform() {
-        assert_eq!(reload_command().is_some(), !cfg!(target_os = "android"));
+        assert_eq!(reload_command().is_some(), !MOBILE);
     }
 
     /// The restore row: first confirm arms, navigation disarms, and each
@@ -5251,9 +5253,7 @@ mod tests {
             o.restore_status.as_deref(),
             Some(format!("Restored. {REOPEN}").as_str())
         );
-        assert!(
-            o.reopen_pending && o.rows().contains(&Row::CloseApp) == cfg!(target_os = "android")
-        );
+        assert!(o.reopen_pending && o.rows().contains(&Row::CloseApp) == MOBILE);
     }
 
     /// Every row of every page has a help line (U5). A restart-only change

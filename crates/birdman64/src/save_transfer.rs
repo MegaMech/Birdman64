@@ -18,6 +18,7 @@ pub enum Kind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(target_os = "ios", allow(dead_code))] // iOS only ever fails
 pub enum Outcome {
     /// The picker was dismissed: nothing changed.
     Cancelled,
@@ -36,7 +37,7 @@ static DONE: Mutex<Option<Outcome>> = Mutex::new(None);
 
 /// The most a save file read accepts: real ones are 2 KB, so anything big is
 /// the wrong file and is not read into memory.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 const MAX_IMPORT_BYTES: u64 = 64 * 1024;
 
 pub fn busy() -> bool {
@@ -88,15 +89,24 @@ pub fn poll() -> Option<Outcome> {
     outcome
 }
 
+#[cfg_attr(target_os = "ios", allow(dead_code))]
 fn export_bytes() -> Result<Vec<u8>, String> {
     pw64_platform::headless::export_eep()
 }
 
+#[cfg_attr(target_os = "ios", allow(dead_code))]
 fn import_bytes(bytes: &[u8]) -> Result<(), String> {
     pw64_platform::headless::import_eep(bytes)
 }
 
-#[cfg(not(target_os = "android"))]
+/// iOS has no file dialog (settings hides both rows): the save is
+/// `pw64.eep` in the Files app's Birdman64 folder.
+#[cfg(target_os = "ios")]
+fn desktop_dialog(_kind: Kind) -> Outcome {
+    Outcome::Failed("Copy pw64.eep in the Files app (Birdman64 folder) instead.".into())
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn desktop_dialog(kind: Kind) -> Outcome {
     let dialog = rfd::FileDialog::new().add_filter("Pilotwings 64 save", &["eep"]);
     match kind {
@@ -123,13 +133,13 @@ fn desktop_dialog(kind: Kind) -> Outcome {
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn export_to(path: &std::path::Path) -> Result<(), String> {
     let bytes = export_bytes()?;
     std::fs::write(path, bytes).map_err(|e| format!("Couldn't write {}: {e}", path.display()))
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn import_from(path: &std::path::Path) -> Result<(), String> {
     let read = |e: std::io::Error| format!("Couldn't read {}: {e}", path.display());
     let len = std::fs::metadata(path).map_err(read)?.len();
@@ -141,7 +151,7 @@ fn import_from(path: &std::path::Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     #[test]
     fn import_rejects_a_big_file_without_reading_it() {
         let p = std::env::temp_dir().join("pw64-save-transfer-big.bin");

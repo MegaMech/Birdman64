@@ -19,9 +19,10 @@
 //! `p2_input` choice. Without it everything merges into controller 1, as
 //! above.
 
-// Android: the gilrs thread (`spawn`) and its helpers never run (no gilrs
-// backend there); `android_pad` feeds the slots instead.
-#![cfg_attr(target_os = "android", allow(dead_code))]
+// Android/iOS: the gilrs thread (`spawn`) and its helpers never run (no gilrs
+// backend there); `mobile_pad` feeds the slots on both, merging the touch
+// controls (`touch_pad`).
+#![cfg_attr(any(target_os = "android", target_os = "ios"), allow(dead_code))]
 
 use crate::config;
 use gilrs::{Axis, Button, Gilrs};
@@ -32,10 +33,21 @@ use std::time::Duration;
 use winit::keyboard::KeyCode;
 
 // Android: no gilrs backend; the window feeds pad key events instead.
+// iOS: no gilrs either — the GameController pads (`ios_gc`) and the touch
+// controls feed the same shared `mobile_pad` state.
+#[cfg(any(target_os = "android", target_os = "ios"))]
+mod mobile_pad;
 #[cfg(target_os = "android")]
-mod android_pad;
-#[cfg(target_os = "android")]
-pub use android_pad::{AndroidKey, android_key, set_touch};
+pub use mobile_pad::{AndroidKey, android_key};
+#[cfg(any(target_os = "android", target_os = "ios"))]
+mod touch_pad;
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub use touch_pad::set_touch;
+// iOS: the GameController pads, polled once per frame on the main thread.
+#[cfg(target_os = "ios")]
+mod ios_gc;
+#[cfg(target_os = "ios")]
+pub use ios_gc::poll as ios_gc_poll;
 
 // libultra `os_cont.h` button bits.
 pub const CONT_A: u16 = 0x8000;
@@ -1727,12 +1739,13 @@ pub fn overlay_pad() -> Pad {
     *OVERLAY_PAD.lock().unwrap()
 }
 
-/// Window lost focus: release every held key (no stuck buttons). Android:
-/// also the pad keys and touch controls (`android_pad`; its lock is taken
-/// and released first, the order its own publishes use).
+/// Window lost focus: release every held key (no stuck buttons). Android/iOS:
+/// also the pad keys / GameController pads and the touch controls
+/// (`mobile_pad`; its locks are taken and released first, the order its own
+/// publishes use).
 pub fn release_all_keys() {
-    #[cfg(target_os = "android")]
-    android_pad::release_all();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    mobile_pad::release_all();
     // Focus loss / suspend / pause: a tap latched meanwhile must not fire
     // in the game later.
     pw64_platform::headless::clear_latch();

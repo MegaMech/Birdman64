@@ -190,7 +190,8 @@ fn thread_cpu_secs() -> Option<HashMap<u32, f64>> {
         }
         Some(out)
     }
-    #[cfg(unix)]
+    // Darwin has no /proc: falls through to None (no thread readout).
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         // SAFETY: plain query.
         let hz = unsafe { libc::sysconf(libc::_SC_CLK_TCK) }.max(1) as f64;
@@ -217,7 +218,7 @@ fn thread_cpu_secs() -> Option<HashMap<u32, f64>> {
         }
         Some(out)
     }
-    #[cfg(not(any(windows, unix)))]
+    #[cfg(not(any(windows, target_os = "linux", target_os = "android")))]
     {
         None
     }
@@ -755,6 +756,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(any(windows, target_os = "linux", target_os = "android"))]
     fn thread_times_are_readable_and_top_thread_found() {
         let a = thread_cpu_secs().unwrap();
         assert!(!a.is_empty());
