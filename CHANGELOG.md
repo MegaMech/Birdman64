@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   "Export save…" and "Import save…". Importing keeps your old save next to it
   as `pw64.eep.before-import` and restarts the game (on Android it asks you to
   reopen the app). On Android, "Open save folder" is replaced by these two.
+- Move the HUD: pause menu "Move HUD" lets you drag the flight gauges (speed,
+  timer, radar, altimeter, fuel, photo count, messages, cannonball gauges) and
+  the performance overlay anywhere on screen, by touch or mouse. Reset puts
+  everything back; your layout is saved.
+
+### Changed
+
+- Android: the touch Z button (take a photo) now sits on the right, next to
+  the C buttons, so you can steer while taking pictures.
 
 ### Fixed
 
