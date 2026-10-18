@@ -84,7 +84,7 @@ installs over the old one and keeps your saves.
 
 **iPhone / iPad (test builds):** not on the release page yet. Unsigned test
 builds come from the project's CI and are installed with your own Apple ID
-(Sideloadly, iLoader or similar); the ROM goes in the Files app under
+([iLoader](https://iloader.app) recommended); the ROM goes in the Files app under
 Birdman64. Touch controls and paired controllers work. How to get and install
 one: [the iOS testing guide](https://github.com/NoahVl/Birdman64/pull/14).
 

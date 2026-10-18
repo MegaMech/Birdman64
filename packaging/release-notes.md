@@ -51,7 +51,8 @@ ROM. Prefer copying the file yourself? `Android/data/app.birdman64/files/rom/`
 still works too. Later APKs install over it and keep your saves.
 
 **iPhone / iPad (test builds):** not attached here. Unsigned test builds come
-from the project's CI and are sideloaded with your own Apple ID; see the
+from the project's CI and are sideloaded with your own Apple ID (with
+[iLoader](https://iloader.app), recommended); see the
 [iOS testing guide](https://github.com/NoahVl/Birdman64/pull/14). Feedback is
 very welcome.
 
