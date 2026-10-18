@@ -1,0 +1,15 @@
+{
+  "$schema": "https://recomp.fyi/schema/v1.json",
+  "game": "Pilotwings 64",
+  "wikidata": "Q933524",
+  "system": "N64",
+  "type": "port",
+  "original": { "region": "USA", "revision": "1.0" },
+  "project": "Birdman64",
+  "status": "playable",
+  "targets": ["Windows", "Linux", "Android", "iOS"],
+  "approach": "Native Rust runtime running the decompiled game code, compiled natively with zig",
+  "maintainers": [{ "name": "NoahVl", "link": "https://github.com/NoahVl" }],
+  "links": [{ "label": "GitHub", "url": "https://github.com/NoahVl/Birdman64" }],
+  "notes": "The game's OS layer, renderer, audio and input are re-implemented natively in Rust; the original game code runs compiled with zig. High frame-rate support, widescreen, in-game settings and scripted verification. Working toward the 1.0 release."
+}
