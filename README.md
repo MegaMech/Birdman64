@@ -6,7 +6,7 @@ rebindable controls and an in-game settings menu. No emulator: the game's own
 code, built for your PC from your own cartridge dump (ROM).
 
 [![Latest release](https://img.shields.io/github/v/release/NoahVl/Birdman64?label=download)](https://github.com/NoahVl/Birdman64/releases/latest)
-[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20Android-blue)](#system-requirements)
+[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20Android%20%7C%20iOS%20(test)-blue)](#system-requirements)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange)](#developing)
 
@@ -76,15 +76,19 @@ drivers (Mesa, already installed on most desktops). For the AppImage:
 desktops). Internet once, about 200 MB of disk.
 
 **Android (experimental):** a 64-bit (arm64) phone or tablet with Android 8
-or newer. Sideload `Birdman64-android-arm64.apk` from the release page, start
-it once, then copy your own ROM into `Android/data/app.birdman64/files/rom/`
-on the device (USB file transfer works) and start it again. The first launch
-builds the game on the device (internet needed once, about 240 MB installed).
-Touch controls appear on screen; a gamepad works too. A newer APK installs
-over the old one and keeps your saves.
+or newer. Sideload `Birdman64-android-arm64.apk` from the release page and
+start it. The first launch builds the game on the device (internet needed
+once, about 240 MB installed), then tap **Choose a game file** and pick your
+ROM. Touch controls appear on screen; a gamepad works too. A newer APK
+installs over the old one and keeps your saves.
 
-**macOS:** not supported: the port needs a memory layout macOS on Apple
-Silicon does not allow.
+**iPhone / iPad (test builds):** not on the release page yet. Unsigned test
+builds come from the project's CI and are installed with your own Apple ID
+(Sideloadly, iLoader or similar); the ROM goes in the Files app under
+Birdman64. Touch controls and paired controllers work. How to get and install
+one: [the iOS testing guide](https://github.com/NoahVl/Birdman64/pull/14).
+
+**macOS:** no download yet.
 
 ## Quick start
 

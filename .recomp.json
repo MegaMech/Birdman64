@@ -11,5 +11,5 @@
   "approach": "Native Rust runtime running the decompiled game code, compiled natively with zig",
   "maintainers": [{ "name": "NoahVl", "link": "https://github.com/NoahVl" }],
   "links": [{ "label": "GitHub", "url": "https://github.com/NoahVl/Birdman64" }],
-  "notes": "Native Rust runtime running the original game code compiled with zig. Frequent releases, latest 1.5.0: movable HUD, save export/import, Android build with system ROM picker, widescreen, high frame-rate display, in-game settings. early iOS test builds."
+  "notes": "Native Rust runtime running the original game code compiled with zig. Frequent releases, latest 1.5.0: movable HUD, save export/import, Android build with system ROM picker, widescreen, high frame-rate display, in-game settings, early iOS test builds."
 }
