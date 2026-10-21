@@ -56,6 +56,16 @@ The one-time setup on first start takes about a minute.
 
 </details>
 
+## Star History
+
+<a href="https://www.star-history.com/?repos=noahvl%2Fbirdman64&type=date&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=noahvl/birdman64&type=date&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=noahvl/birdman64&type=date&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=noahvl/birdman64&type=date&legend=bottom-right" />
+ </picture>
+</a>
+
 ## System requirements
 
 **Windows:** Windows 10 or 11, 64 bit. A graphics card that supports
