@@ -1,8 +1,9 @@
 //! Mobile pads → N64 controller slots. gilrs has no Android or iOS
 //! backend, so a platform module feeds the pad state here: on Android the
 //! window reports pad keys as `PhysicalKey::Unidentified(NativeKeyCode::
-//! Android(keycode))` and the d-pad as the arrow keys ([`android_key`]);
-//! on iOS the GameController poller (`ios_gc.rs`) pushes a full pad state
+//! Android(keycode))` and the d-pad as the arrow keys ([`android_key`]),
+//! and the sticks, analog triggers and hat as `AxisMotion` ([`android_axis`],
+//! from a winit patch: stock winit 0.30 turns them into touches); on iOS the GameController poller (`ios_gc.rs`) pushes a full pad state
 //! through [`set_pad`] every frame. Each Android keycode / GC button
 //! becomes the gilrs [`Button`] at the same position, so the
 //! `[input.gamepad]` bindings, pad capture, the settings trigger and the
@@ -10,13 +11,9 @@
 //! same `gamepads` list the gilrs thread fills on desktop (one entry, id
 //! [`PAD_ID`]). The on-screen touch controls' state lives in
 //! [`super::touch_pad`] (shared with iOS); this module reads it on every
-//! republish, so keys, axes and touch land in one publish.
+//! republish, so keys, axes and touch land in one publish. Until a pad
+//! sends an axis, the d-pad also moves the stick (digital).
 //!
-//! TODO(android): analog sticks and triggers. winit 0.30 turns joystick
-//! MotionEvents into `Touch` events (X/Y only, no source), so the axes
-//! (AXIS_X/Y, Z/RZ, LTRIGGER/RTRIGGER, HAT_X/Y) need their own path (a winit
-//! patch, or reading the input queue ahead of winit); [`set_axes`] takes
-//! them. Until axes arrive, the d-pad also moves the stick (digital).
 //! TODO(android): per-device ids and names (`InputDevice.getName()` through
 //! JNI): every pad merges into one "Android gamepad" entry today.
 
@@ -61,24 +58,16 @@ pub enum AndroidKey {
     Keyboard,
 }
 
-/// Analog axes, Android's ranges: sticks and hat -1..1 (y down), triggers
-/// 0..1.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Axes {
-    pub lx: f32,
-    pub ly: f32,
-    pub rx: f32,
-    pub ry: f32,
-    pub lt: f32,
-    pub rt: f32,
-    pub hat_x: f32,
-    pub hat_y: f32,
-}
+pub use super::pad_axes::Axes;
+#[cfg(target_os = "android")]
+use super::pad_axes::{RawAxes, axis_buttons, axis_name};
 
-#[derive(Default)]
 struct State {
     held: Vec<Button>,
     axes: Axes,
+    /// The latest raw Android axis values ([`android_axis`]).
+    #[cfg(target_os = "android")]
+    raw: RawAxes,
     /// Some axis event arrived: the d-pad stops doubling as the stick.
     axes_seen: bool,
     settings_down: bool,
@@ -99,6 +88,8 @@ static STATE: Mutex<State> = Mutex::new(State {
         hat_x: 0.0,
         hat_y: 0.0,
     },
+    #[cfg(target_os = "android")]
+    raw: RawAxes::new(),
     axes_seen: false,
     settings_down: false,
     name: String::new(),
@@ -132,11 +123,63 @@ pub fn button_for_keycode(code: u32) -> Option<Button> {
     })
 }
 
+/// The names of the devices Android reports as game controllers, as the UI
+/// thread last read them (`android::window_mode`, about once a second).
+#[cfg(target_os = "android")]
+static ANDROID_PADS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// The last controller (or other key) input that reached the app, for the
+/// Controls page's test line: tells a player (and a bug report) whether
+/// presses arrive at all and as what.
+#[cfg(target_os = "android")]
+static LAST_INPUT: Mutex<String> = Mutex::new(String::new());
+
+/// Stores Android's game controller list (logged when it changes).
+#[cfg(target_os = "android")]
+pub fn set_android_pads(names: Vec<String>) {
+    let mut pads = ANDROID_PADS.lock().unwrap();
+    if *pads != names {
+        eprintln!("[input] game controllers: {names:?}");
+        *pads = names;
+    }
+}
+
+/// The game controllers Android reports (names).
+#[cfg(target_os = "android")]
+pub fn android_pads() -> Vec<String> {
+    ANDROID_PADS.lock().unwrap().clone()
+}
+
+/// The last input [`LAST_INPUT`] describes ("" = none yet).
+#[cfg(target_os = "android")]
+pub fn last_pad_input() -> String {
+    LAST_INPUT.lock().unwrap().clone()
+}
+
+#[cfg(target_os = "android")]
+fn note_input(what: String) {
+    eprintln!("[input] {what}");
+    *LAST_INPUT.lock().unwrap() = what;
+}
+
 /// The window's key event → pad state. The arrow keys count as the d-pad
 /// (that is how winit reports a pad's d-pad; a Bluetooth keyboard's arrows
 /// then steer too, as on desktop).
 #[cfg(target_os = "android")]
 pub fn android_key(key: PhysicalKey, pressed: bool, repeat: bool) -> AndroidKey {
+    if pressed && !repeat {
+        let code = match key {
+            PhysicalKey::Unidentified(NativeKeyCode::Android(c)) => format!("key code {c}"),
+            other => format!("{other:?}"),
+        };
+        let what = match key {
+            PhysicalKey::Unidentified(NativeKeyCode::Android(KEYCODE_BACK)) => "Back".into(),
+            PhysicalKey::Unidentified(NativeKeyCode::Android(c)) => {
+                button_for_keycode(c).map_or("not a controller button".into(), |b| format!("{b:?}"))
+            }
+            _ => "keyboard key".into(),
+        };
+        note_input(format!("{what} ({code})"));
+    }
     let button = match key {
         PhysicalKey::Unidentified(NativeKeyCode::Android(KEYCODE_BACK)) => {
             return if pressed && !repeat {
@@ -188,18 +231,50 @@ pub fn release_all() {
     let mut st = STATE.lock().unwrap();
     st.held.clear();
     st.axes = Axes::default();
+    #[cfg(target_os = "android")]
+    {
+        st.raw = RawAxes::new();
+    }
     republish_state(&mut st, crate::settings::pad_button());
 }
 
-/// TODO(android) hook: the analog axes of the pad, once something delivers
-/// them (module docs). Its caller should also hide the touch controls
-/// (`touch::Controls::hide`), as a pad key does.
-#[allow(dead_code)]
-pub fn set_axes(axes: Axes) {
+/// The window's `AxisMotion` event (one per axis of a pad MotionEvent) →
+/// pad state. Returns true while the pad is clearly in use (a stick past
+/// half travel, a trigger or the hat pressed): the window then hides the
+/// touch controls, as a pad key does. Resting stick noise doesn't count.
+#[cfg(target_os = "android")]
+pub fn android_axis(axis: u32, value: f32) -> bool {
+    if value.abs() > 0.5 {
+        note_input(format!("axis {} {value:+.2}", axis_name(axis)));
+    }
+    let settings_btn = crate::settings::pad_button();
     let mut st = STATE.lock().unwrap();
+    st.raw.set(axis, value);
+    let axes = st.raw.axes();
+    let pressed = axis_buttons(&axes, TRIGGER_THRESHOLD);
+    let in_use = !pressed.is_empty()
+        || [axes.lx, axes.ly, axes.rx, axes.ry]
+            .iter()
+            .any(|v| v.abs() > 0.5);
+    if st.axes_seen && axes == st.axes {
+        return in_use;
+    }
+    // Pad capture: a trigger or hat press binds like a button, as gilrs
+    // reports them on desktop (the game is paused under the overlay).
+    if PAD_CAPTURE.load(Ordering::Relaxed) {
+        let before = axis_buttons(&st.axes, TRIGGER_THRESHOLD);
+        if let Some(&b) = pressed
+            .iter()
+            .find(|&&b| !before.contains(&b) && b != settings_btn)
+        {
+            *CAPTURED_BUTTON.lock().unwrap() = Some(b);
+            PAD_CAPTURE.store(false, Ordering::Relaxed);
+        }
+    }
     st.axes = axes;
     st.axes_seen = true;
-    republish_state(&mut st, crate::settings::pad_button());
+    republish_state(&mut st, settings_btn);
+    in_use
 }
 
 /// The iOS GameController poller's hook (`ios_gc::poll`, called every
