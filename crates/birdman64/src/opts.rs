@@ -286,6 +286,38 @@ pub fn infinite_view_distance() -> bool {
     )
 }
 
+/// Experimental plane variant of the gyrocopter (the C `pw64_plane` flag,
+/// latched at each test start; plane runs save nothing): `PW64_PLANE=1|0`
+/// or a `PW64_START=<class>:pl:<test>` boot > `[extras] plane` > off.
+pub fn plane() -> bool {
+    let start = pw64_platform::start::env_plane().then_some(true);
+    precedence(
+        env_opt("PW64_PLANE", "use 0 or 1", parse_vsync).or(start),
+        crate::config::get().extras.plane,
+        false,
+    )
+}
+
+/// The plane flag as last handed to the game: 0 = never, 1 off, 2 on.
+static PLANE_LIVE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Hands the plane flag to the game (boot, settings row) and remembers it.
+pub fn apply_plane(on: bool) {
+    // Unit tests drive the settings rows in parallel: no process-wide mirror.
+    if !cfg!(test) {
+        PLANE_LIVE.store(1 + u8::from(on), std::sync::atomic::Ordering::Relaxed);
+    }
+    pw64_game::set_plane(on);
+}
+
+/// The plane flag as in force (live changes included), else [`plane`].
+pub fn live_plane() -> bool {
+    match PLANE_LIVE.load(std::sync::atomic::Ordering::Relaxed) {
+        0 => plane(),
+        v => v == 2,
+    }
+}
+
 /// The default for `fill_screen` given the widescreen setting.
 pub(crate) fn fill_default(widescreen: Option<f32>) -> bool {
     widescreen.is_some()
