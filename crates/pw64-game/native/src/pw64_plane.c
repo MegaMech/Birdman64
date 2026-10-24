@@ -1,6 +1,7 @@
 /*
- * Plane variant of the gyrocopter (experimental; Settings "Gyrocopter:
- * Plane", PW64_PLANE=1, PW64_START=<class>:pl:<test>). The fixed-wing flight
+ * Plane variant of the gyrocopter (experimental; Settings "Gyrocopter: Small
+ * plane / Big plane", PW64_PLANE=small|big, PW64_START=<class>:ps|pl:<test>).
+ * The fixed-wing flight
  * model is based on MegaMech's aeroplane.c and reworked here: drag that
  * bounds the top speed, induced drag, an angle-of-attack stall, takeoff
  * rotation, wheel brakes and attitude guards that keep clear of the gyro's
@@ -56,9 +57,11 @@ extern u16 D_8036957E;                 /* the test's class */
 extern Unk803599D0 D_803694D0;         /* fuel burn vs. throttle */
 extern Unk802D3658_Unk111C D_80369070; /* collision capsules: [0] body, [1] rotor */
 
-/* Rust (pw64_game::set_plane, also live from the settings screen): 1 = the
- * gyrocopter slot flies the plane from the next test start. */
-int pw64_plane = 0;
+/* Rust (pw64_game::set_plane, also live from the settings screen): which
+ * aircraft the gyrocopter slot flies from the next test start:
+ * PW64_PLANE_OFF (the gyrocopter), PW64_PLANE_BIG (model 39, or 27 where the
+ * level didn't load 39) or PW64_PLANE_SMALL (model 27). */
+int pw64_plane = PW64_PLANE_OFF;
 /* 1 while the current test flies the plane: latched by the first
  * gyrocopterLoadLevel of a test (replays reload the vehicle and keep it),
  * cleared by pw64_plane_end. */
@@ -85,7 +88,8 @@ typedef struct {
 } PlaneModel;
 
 /* MODEL_BIG_WHITE_RED_PLANE first (not in Ever-Frost's model list), then
- * MODEL_YELLOW_WHITE_PLANE (on every island). */
+ * MODEL_YELLOW_WHITE_PLANE (on every island): the big plane takes the first
+ * one loaded, the small plane starts at index 1. */
 static const PlaneModel sPlaneModels[] = {
     {
         MODEL_BIG_WHITE_RED_PLANE,
@@ -229,11 +233,11 @@ void pw64_plane_load(struct GyrocopterData* gc) {
 
     if (!pw64_plane_run) {
         /* Not in the attract demo: its recorded flights are gyrocopter ones. */
-        if (!pw64_plane || D_80362690->unkA4) {
+        if (((pw64_plane != PW64_PLANE_BIG) && (pw64_plane != PW64_PLANE_SMALL)) || D_80362690->unkA4) {
             return;
         }
         sPlane = NULL;
-        for (i = 0; i < ARRAY_COUNT(sPlaneModels); i++) {
+        for (i = (pw64_plane == PW64_PLANE_SMALL) ? 1 : 0; i < ARRAY_COUNT(sPlaneModels); i++) {
             if (plane_model_loaded(sPlaneModels[i].modelId) != NULL) {
                 sPlane = &sPlaneModels[i];
                 break;

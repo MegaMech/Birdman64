@@ -2,9 +2,11 @@
 
 Code: `crates/pw64-game/native/src/pw64_plane.c` (hooks + flight model), hooks in
 `gyrocopter.c.patch`, `code_7CF30.c.patch`, `code_7C4C0.c.patch`, save guard in
-`game.c.patch` / `results.c.patch`. Flag `pw64_plane` (exported data symbol, set by
-`pw64_game::set_plane`); Settings Main page "Gyrocopter", `[extras] plane`,
-`PW64_PLANE=1`, `PW64_START=<class>:pl:<test>`.
+`game.c.patch` / `results.c.patch`. `pw64_plane` (exported data symbol, set by
+`pw64_game::set_plane`): `PW64_PLANE_OFF` 0, `_BIG` 1, `_SMALL` 2 (pw64_native.h).
+Settings Main page "Gyrocopter" cycles Gyrocopter / Small plane / Big plane;
+`[extras] plane = "small"|"big"` (old bool accepted: `true` = big); `PW64_PLANE=0|1|small|big`
+(1 = big); `PW64_START=<class>:pl:<test>` (big) / `ps` (small).
 
 - **Latch:** `pw64_plane_run` is set by the first `gyrocopterLoadLevel` of a test
   (not in the attract demo) and kept across replay reloads; `pw64_plane_end` (test
@@ -15,8 +17,9 @@ Code: `crates/pw64-game/native/src/pw64_plane.c` (hooks + flight model), hooks i
   snapshot of `D_80364210[unk9C]` taken at the latch, so the tallies it made in memory
   never reach a later save. Verified: landing with 28 pts, Another test, eep equal to
   a fresh one.
-- **Models:** 39 (big plane) unless the level didn't load it (Ever-Frost: all pilot
-  class tests) → 27. Both are one part, nose +y, origin not at the CG (39's is behind
+- **Models:** big = 39 unless the level didn't load it (Ever-Frost: all pilot
+  class tests) → 27; small = 27 always (`sPlaneModels` index 1). The same flight
+  model and the per-model geometry serve both; both sit right on the runways. Both are one part, nose +y, origin not at the CG (39's is behind
   the tail, ~20 m), so `PlaneModel.offset` is applied after every root
   `uvDobjPosm(objId, 0)` (`pw64_plane_posm`). Geometry (gear, capsules, camera) was
   measured from the meshes (part scale 0.1).

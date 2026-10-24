@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Experimental: fly the gyrocopter tests in a plane. Switch "Gyrocopter" to
-  "Plane (experimental)" in the pause menu; it applies from the next test.
+  "Small plane" or "Big plane" in the pause menu; it applies from the next
+  test (Ever-Frost has only the small plane).
   Hold the stick back to take off, close the throttle (B) to land and brake.
   Plane flights never save scores or medals. Flight model based on
   MegaMech's plane prototype.

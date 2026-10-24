@@ -527,7 +527,7 @@ pub struct Overlay {
     /// disconnects (Main page row).
     pause_background: bool,
     /// Staged gyrocopter plane variant (live from the next test start).
-    plane: bool,
+    plane: opts::PlaneMode,
     /// Switch 2 pads over BLE (live: `ble::set_enabled` on change).
     ble: bool,
     /// Split-screen (live: `input::request_split` on change; the game
@@ -2558,16 +2558,7 @@ impl Overlay {
                 if self.pause_background { "On" } else { "Off" }.into(),
                 "",
             ),
-            Opt::Plane => (
-                "Gyrocopter",
-                if self.plane {
-                    "Plane (experimental)"
-                } else {
-                    "Standard"
-                }
-                .into(),
-                "",
-            ),
+            Opt::Plane => ("Gyrocopter", self.plane.label().into(), "(experimental)"),
             Opt::Ble => (
                 "Switch 2 controllers (Bluetooth)",
                 if self.ble { "On" } else { "Off" }.into(),
@@ -3001,7 +2992,8 @@ impl Overlay {
                 Opt::PerfCorner => self.perf.corner = self.perf.corner.step(d),
                 Opt::PauseBackground => self.pause_background = !self.pause_background,
                 Opt::Plane => {
-                    self.plane = !self.plane;
+                    // Gyrocopter, Small plane, Big plane (wrapping).
+                    self.plane = self.plane.step(d);
                     // Live: the game latches it at each test start.
                     opts::apply_plane(self.plane);
                 }
@@ -3150,7 +3142,7 @@ impl Overlay {
             splitscreen_collisions: Some(self.collisions),
             splitscreen_share: Some(self.share_scores),
             split_layout: Some(self.split_layout.to_config()),
-            plane: Some(self.plane),
+            plane: Some(self.plane.to_config()),
             // The rebinding maps as they stand now (empty = defaults, so
             // the sub-table is dropped from the file).
             keyboard: Some(input::keyboard_overrides()),
@@ -3762,8 +3754,8 @@ fn help(row: Row) -> &'static str {
                  disconnects."
             }
             Opt::Plane => {
-                "Experimental: fly the gyrocopter tests in a small plane. Applies from the next \
-                 test. Plane flights don't save scores."
+                "Experimental: fly the gyrocopter tests in a small or a big plane. Applies from \
+                 the next test. Plane flights don't save scores."
             }
             Opt::Ble => {
                 "Play with Switch 2 Joy-Con or a Pro Controller 2 over Bluetooth. Experimental: \
@@ -4370,7 +4362,7 @@ mod tests {
             splitscreen_collisions: Some(true),
             splitscreen_share: Some(true),
             split_layout: Some("left_right"),
-            plane: Some(true),
+            plane: Some("big"),
             perf: Some(crate::perf::Cfg {
                 graph: true,
                 cpu: true,
@@ -4414,7 +4406,7 @@ mod tests {
             splitscreen_collisions: Some(false),
             splitscreen_share: Some(false),
             split_layout: Some("top_bottom"),
-            plane: Some(false),
+            plane: Some("off"),
             perf: Some(crate::perf::Cfg::default()),
             keyboard: Some(std::collections::BTreeMap::new()),
             gamepad: Some(std::collections::BTreeMap::new()),
@@ -4430,7 +4422,7 @@ mod tests {
              \n[input.keyboard]\nA = \"KeyX\"\n\n[input.gamepad]\nA = \"East\"\n\
              \n[input.ble]\nenabled = true\n\
              \n[splitscreen]\nenabled = true\np2_input = \"keyboard\"\ncollisions = true\n\
-             share_scores = true\nlayout = \"left_right\"\n\n[extras]\nplane = true\n",
+             share_scores = true\nlayout = \"left_right\"\n\n[extras]\nplane = \"big\"\n",
         )
         .unwrap();
         config::apply(&mut table, &d, false).unwrap();
@@ -4590,6 +4582,21 @@ mod tests {
         assert_eq!(rows[11], Row::ExportSave);
         assert_eq!(rows[12], Row::ImportSave);
         assert_eq!(rows[13], Row::Quit);
+        // The Gyrocopter row cycles Gyrocopter → Small plane → Big plane.
+        o.plane = opts::PlaneMode::Gyrocopter;
+        o.sel = 8;
+        let labels: Vec<String> = (0..4)
+            .map(|_| {
+                o.change(1, true);
+                o.row_text(Opt::Plane).1
+            })
+            .collect();
+        assert_eq!(
+            labels,
+            ["Small plane", "Big plane", "Gyrocopter", "Small plane"]
+        );
+        o.change(-1, true);
+        assert_eq!(o.plane, opts::PlaneMode::Gyrocopter);
         // Move HUD closes the overlay into the edit mode (once).
         o.sel = 2;
         o.confirm();

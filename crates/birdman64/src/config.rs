@@ -65,7 +65,7 @@
 //! layout = "left_right"    # or "top_bottom" (default) (`PW64_SPLIT_LAYOUT=lr|tb`)
 //!
 //! [extras]                 # experimental (settings screen, Main page)
-//! plane = true             # gyrocopter tests flown by a plane, saving nothing (`PW64_PLANE`)
+//! plane = "big"            # gyrocopter tests flown by "small" / "big" plane, saving nothing (`PW64_PLANE`; old `true` = big)
 //!
 //! [oled]                   # OLED care (settings screen): HUD drift + dim
 //! drift = false            # `PW64_OLED`
@@ -271,9 +271,10 @@ pub struct Splitscreen {
 /// `[extras]`: experimental gameplay options (settings screen, Main page).
 #[derive(Debug, Default)]
 pub struct Extras {
-    /// `plane` — the gyrocopter's tests are flown by a plane; those runs
-    /// save nothing (`PW64_PLANE`).
-    pub plane: Option<bool>,
+    /// `plane` — `"small"`/`"big"`: the gyrocopter's tests are flown by that
+    /// plane; those runs save nothing (`PW64_PLANE`). The old on/off form
+    /// is accepted: `true` = big, `false` = off.
+    pub plane: Option<crate::opts::PlaneMode>,
 }
 
 #[derive(Debug, Default)]
@@ -735,7 +736,23 @@ fn from_table(table: &toml::Table) -> Config {
     if let Some(v) = table.get("extras") {
         match v.as_table() {
             Some(ex) => {
-                cfg.extras.plane = opt_bool_of(ex, "plane", "extras.plane", &mut ignored);
+                // Text, or the old bool (true = the big plane).
+                cfg.extras.plane = match ex.get("plane") {
+                    None => None,
+                    Some(toml::Value::Boolean(b)) => crate::opts::parse_plane(&b.to_string()),
+                    Some(v) => match v.as_str().and_then(crate::opts::parse_plane) {
+                        Some(m) => Some(m),
+                        None => {
+                            ignore(
+                                &mut ignored,
+                                "extras.plane",
+                                v,
+                                "use \"off\", \"small\" or \"big\"",
+                            );
+                            None
+                        }
+                    },
+                };
             }
             None => ignore(&mut ignored, "extras", v, "must be an [extras] table"),
         }
@@ -1041,9 +1058,9 @@ pub struct SavedSettings {
     /// Performance overlay extras (`[perf]`; None = leave as-is). The fps
     /// counter itself is `show_fps`.
     pub perf: Option<crate::perf::Cfg>,
-    /// The gyrocopter's plane variant (`[extras] plane`; None = leave
-    /// as-is).
-    pub plane: Option<bool>,
+    /// The gyrocopter's plane variant (`[extras] plane`, the
+    /// `PlaneMode::to_config` spelling; None = leave as-is).
+    pub plane: Option<&'static str>,
 }
 
 /// Writes the screen's settings into `pw64.toml`. The file is round-tripped
@@ -1204,7 +1221,7 @@ fn builtin_default(section: &str, key: &str, low_end: bool) -> Option<toml::Valu
         ("splitscreen", "share_scores") => Some(false.into()),
         ("splitscreen", "layout") => Some("top_bottom".into()),
         // Plane variant: off unless the player picks it.
-        ("extras", "plane") => Some(false.into()),
+        ("extras", "plane") => Some("off".into()),
         _ => None,
     }
 }
@@ -1537,25 +1554,40 @@ mod tests {
         super::apply(t, u, false)
     }
 
-    /// `[extras] plane`: parses, is written when on and removed (with the
-    /// emptied table) when back at the default.
+    /// `[extras] plane`: parses (the old bool too: true = big plane), is
+    /// written for a plane and removed (with the emptied table) when back at
+    /// the gyrocopter.
     #[test]
     fn extras_plane_round_trips() {
+        use crate::opts::PlaneMode;
+        let plane = |s: &str| parse(s).unwrap().extras.plane;
+        assert_eq!(plane("[extras]\nplane = true\n"), Some(PlaneMode::Big));
         assert_eq!(
-            parse("[extras]\nplane = true\n").unwrap().extras.plane,
-            Some(true)
+            plane("[extras]\nplane = false\n"),
+            Some(PlaneMode::Gyrocopter)
         );
-        assert_eq!(parse("[graphics]\nmsaa = 4\n").unwrap().extras.plane, None);
+        assert_eq!(
+            plane("[extras]\nplane = \"small\"\n"),
+            Some(PlaneMode::Small)
+        );
+        assert_eq!(plane("[extras]\nplane = \"Big\"\n"), Some(PlaneMode::Big));
+        assert_eq!(plane("[graphics]\nmsaa = 4\n"), None);
         assert!(!parse("[extras]\nplane = 3\n").unwrap().ignored.is_empty());
+        assert!(
+            !parse("[extras]\nplane = \"huge\"\n")
+                .unwrap()
+                .ignored
+                .is_empty()
+        );
         let mut t = toml::Table::new();
         let on = SavedSettings {
-            plane: Some(true),
+            plane: Some("small"),
             ..Default::default()
         };
         apply(&mut t, &on).unwrap();
-        assert_eq!(t["extras"]["plane"].as_bool(), Some(true));
+        assert_eq!(t["extras"]["plane"].as_str(), Some("small"));
         let off = SavedSettings {
-            plane: Some(false),
+            plane: Some("off"),
             ..Default::default()
         };
         apply(&mut t, &off).unwrap();

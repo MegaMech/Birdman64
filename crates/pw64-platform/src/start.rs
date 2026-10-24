@@ -14,9 +14,10 @@ pub struct Start {
     pub vehicle: i32,
     pub test: i32,
     pub pilot: i32,
-    /// Vehicle `pl`/`plane`: a gyrocopter test flown by the experimental
-    /// plane variant (birdman64 sets the C flag, see [`env_plane`]).
-    pub plane: bool,
+    /// Vehicle `pl` (big plane, 1) or `ps` (small plane, 2): a gyrocopter
+    /// test flown by the experimental plane variant; 0 = none. Same values
+    /// as the C `pw64_plane` (birdman64 sets it, see [`env_plane`]).
+    pub plane: i32,
 }
 
 /// Human-readable class names, indexed by class id.
@@ -58,7 +59,8 @@ fn test_count(class: i32, veh: i32) -> i32 {
 
 /// Parses the `PW64_START` value. Class `beginner|a|b|pilot`; vehicle
 /// `hg|rb|gc|cb|sd|jh|bm` (or full names; `pl`/`plane` = a gyrocopter test
-/// flown by the plane variant, which saves nothing); test 1-based and must exist for
+/// flown by the big plane, `ps` = by the small plane; plane runs save
+/// nothing); test 1-based and must exist for
 /// that class+vehicle; pilot `lark|goose|hawk|kiwi|ibis|robin` (default
 /// lark); file 1|2 (default 1).
 pub fn parse(s: &str) -> Result<Start, String> {
@@ -76,11 +78,15 @@ pub fn parse(s: &str) -> Result<Start, String> {
         "pilot" | "p" | "3" => 3,
         c => return Err(format!("unknown class `{c}` (beginner, a, b, pilot)")),
     };
-    let plane = matches!(parts[1].as_str(), "pl" | "plane");
+    let plane = match parts[1].as_str() {
+        "pl" | "plane" => 1,
+        "ps" => 2,
+        _ => 0,
+    };
     let vehicle = match parts[1].as_str() {
         "hg" | "hangglider" | "hang_glider" => 0,
         // The plane variant flies the gyrocopter's tests.
-        "pl" | "plane" => 2,
+        "pl" | "plane" | "ps" => 2,
         "rb" | "rocketbelt" | "rocket_belt" => 1,
         "gc" | "gyrocopter" => 2,
         "cb" | "cannonball" => 3,
@@ -89,7 +95,7 @@ pub fn parse(s: &str) -> Result<Start, String> {
         "bm" | "birdman" => 6,
         v => {
             return Err(format!(
-                "unknown vehicle `{v}` (hg, rb, gc, cb, sd, jh, bm, pl)"
+                "unknown vehicle `{v}` (hg, rb, gc, cb, sd, jh, bm, pl, ps)"
             ));
         }
     };
@@ -128,12 +134,13 @@ pub fn parse(s: &str) -> Result<Start, String> {
     })
 }
 
-/// Whether `PW64_START` boots a plane-variant test (`<class>:pl:<test>`).
-pub fn env_plane() -> bool {
+/// The plane `PW64_START` boots (`<class>:pl|ps:<test>`, [`Start::plane`]
+/// values), 0 = none.
+pub fn env_plane() -> i32 {
     std::env::var("PW64_START")
         .ok()
         .and_then(|v| parse(&v).ok())
-        .is_some_and(|s| s.plane)
+        .map_or(0, |s| s.plane)
 }
 
 /// Pilot name → decomp `PILOT_*` id (lark 0, goose 1, hawk 2, kiwi 3,
@@ -223,7 +230,7 @@ mod tests {
                 vehicle: 0,
                 test: 1,
                 pilot: 0,
-                plane: false
+                plane: 0
             }
         );
         assert_eq!(
@@ -234,13 +241,16 @@ mod tests {
                 vehicle: 2,
                 test: 2,
                 pilot: 4,
-                plane: false
+                plane: 0
             }
         );
         // The plane variant flies gyrocopter tests.
         let pl = parse("a:pl:1").unwrap();
-        assert!(pl.plane && pl.vehicle == 2 && pl.test == 0);
-        assert!(parse("pilot:plane:3").unwrap().plane);
+        assert!(pl.plane == 1 && pl.vehicle == 2 && pl.test == 0);
+        assert_eq!(parse("pilot:plane:3").unwrap().plane, 1);
+        let ps = parse("b:ps:2").unwrap();
+        assert!(ps.plane == 2 && ps.vehicle == 2 && ps.test == 1);
+        assert_eq!(parse("a:gc:1").unwrap().plane, 0);
         assert!(parse("pilot:plane:4").is_err());
         // last valid test of each bonus/multi-test combination
         for valid in ["beginner:cb:4", "pilot:bm:4", "a:sd:1", "b:jh:1"] {

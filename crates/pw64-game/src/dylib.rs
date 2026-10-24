@@ -57,7 +57,7 @@ pub struct Game {
     pub infinite_lod: *mut i32,
     /// `pw64_infinite_view_distance` (pw64_visibility.c): 0 = off.
     pub infinite_view_distance: *mut i32,
-    /// `pw64_plane` (pw64_plane.c): gyrocopter plane variant, 0 = off.
+    /// `pw64_plane` (pw64_plane.c): gyrocopter plane variant, `PLANE_*`.
     pub plane: *mut i32,
     /// `D_802B892C` (memory.c): the sample global memmap checks.
     pub sample_global: *const u32,
