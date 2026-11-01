@@ -851,11 +851,77 @@ fn gamepad_pad(g: &gilrs::Gamepad) -> Pad {
         }
     }
     let (stick_x, stick_y) = stick_to_n64(g.value(Axis::LeftStickX), g.value(Axis::LeftStickY));
+    let c_buttons = match eightbitdo64_c_buttons(g) {
+        Some(c) => c,
+        None => c_stick_buttons(g.value(Axis::RightStickX), g.value(Axis::RightStickY)),
+    };
     slot_bits_pad(bits).merge(Pad {
-        button: c_stick_buttons(g.value(Axis::RightStickX), g.value(Axis::RightStickY)),
+        button: c_buttons,
         stick_x,
         stick_y,
     })
+}
+
+/// 8BitDo 64 in DInput mode on Windows: the C buttons arrive as two raw axes
+/// (index 3: C-up -1 / C-down +1, index 2: C-left -1 / C-right +1) and ZR as
+/// axis 4 resting at +1, which the SDL mapping calls RightStickX/Y and would
+/// read as wrong C directions plus a stuck C-up. Returns the C buttons from
+/// the raw axes, or `None` for any other pad.
+#[cfg(windows)]
+fn eightbitdo64_c_buttons(g: &gilrs::Gamepad) -> Option<u16> {
+    if g.vendor_id() == Some(0x057E) && g.product_id() == Some(0x2019) {
+        return Some(nso_n64_c_buttons(g));
+    }
+    if g.vendor_id() != Some(0x2DC8) || g.product_id() != Some(0x3019) {
+        return None;
+    }
+    // WGI codes: kind (axis = 1) << 16 | index.
+    let raw = |index: u32| {
+        g.state()
+            .axes()
+            .find(|(code, _)| code.into_u32() == (1 << 16) | index)
+            .map_or(0.0, |(_, d)| d.value())
+    };
+    Some(eightbitdo64_c_from_axes(raw(3), raw(2)))
+}
+
+/// Switch Online N64 controller on Windows: the SDL mapping turns its C
+/// buttons into half-axes (`+rightx:b8 -rightx:b3 +righty:b2 -righty:b7`) and
+/// gilrs reports the negative halves as +1, so C-left read as C-right and
+/// C-up/C-down were lost. The state keeps the raw button code on each axis
+/// entry: read them directly (button codes 2/7/3/8 = C-up/down/left/right).
+#[cfg(windows)]
+fn nso_n64_c_buttons(g: &gilrs::Gamepad) -> u16 {
+    let state = g.state();
+    let held = |index: u32| {
+        state
+            .axes()
+            .any(|(code, d)| code.into_u32() == index && d.value() > 0.5)
+            || state
+                .buttons()
+                .any(|(code, d)| code.into_u32() == index && d.is_pressed())
+    };
+    [
+        (2, CONT_C_UP),
+        (7, CONT_C_DOWN),
+        (3, CONT_C_LEFT),
+        (8, CONT_C_RIGHT),
+    ]
+    .into_iter()
+    .filter(|&(index, _)| held(index))
+    .fold(0, |b, (_, bit)| b | bit)
+}
+
+#[cfg(not(windows))]
+fn eightbitdo64_c_buttons(_g: &gilrs::Gamepad) -> Option<u16> {
+    None
+}
+
+/// Raw 8BitDo 64 C axes (vertical = axis 3, horizontal = axis 2) → C buttons.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn eightbitdo64_c_from_axes(vertical: f32, horizontal: f32) -> u16 {
+    // `c_stick_buttons` has y up positive and the pad's -1 is up: flip.
+    c_stick_buttons(horizontal, -vertical)
 }
 
 /// Slot bits (CONT buttons + `STICK_*` directions) → pad: the directions
@@ -2014,8 +2080,20 @@ pub fn spawn() {
             // reconnects. The window decides whether to pause, on its own
             // thread (`window::request_pause`).
             let mut pause_at: Option<std::time::Instant> = None;
+            let mut padlog = PadLog::open();
+            if let Some(log) = padlog.as_mut() {
+                for (id, g) in gilrs.gamepads() {
+                    log.pad_info(id, &g);
+                }
+            }
             loop {
                 while let Some(ev) = gilrs.next_event() {
+                    if let Some(log) = padlog.as_mut() {
+                        log.event(&ev);
+                        if matches!(ev.event, gilrs::EventType::Connected) {
+                            log.pad_info(ev.id, &gilrs.gamepad(ev.id));
+                        }
+                    }
                     match ev.event {
                         gilrs::EventType::Connected => {
                             let g = gilrs.gamepad(ev.id);
@@ -2136,6 +2214,9 @@ pub fn spawn() {
                     *CAPTURED_SOURCE.lock().unwrap() = Some(P2Input::Ble);
                     SOURCE_CAPTURE.store(false, Ordering::Relaxed);
                 } else if s.gamepads != gamepads || s.ble != ble || s.nav != nav {
+                    if let Some(log) = padlog.as_mut() {
+                        log.pads(&gamepads);
+                    }
                     s.gamepads = gamepads;
                     s.ble = ble;
                     s.nav = nav;
@@ -2219,6 +2300,83 @@ static ACTIVE_PAD_ID: Mutex<Option<gilrs::GamepadId>> = Mutex::new(None);
 /// The active pad, if one has been connected / used.
 pub fn active_pad() -> Option<PadInfo> {
     ACTIVE_PAD.lock().unwrap().clone()
+}
+
+/// Controller diagnostics for bug reports: when `PW64_PAD_LOG` is set or an
+/// empty `pad-debug.txt` exists in the data dir (next to the exe for a
+/// portable install), every raw gilrs event and every change of the N64 pad
+/// each gamepad produces is appended to that file. Capped, so a forgotten
+/// file stays small.
+struct PadLog {
+    file: std::fs::File,
+    start: std::time::Instant,
+    written: usize,
+}
+
+impl PadLog {
+    const MAX_BYTES: usize = 4 << 20;
+
+    fn open() -> Option<Self> {
+        let path = crate::paths::data_dir().join("pad-debug.txt");
+        if std::env::var_os("PW64_PAD_LOG").is_none() && !path.exists() {
+            return None;
+        }
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|e| eprintln!("[input] can't open {}: {e}", path.display()))
+            .ok()?;
+        eprintln!("[input] controller diagnostics -> {}", path.display());
+        let mut log = Self {
+            file,
+            start: std::time::Instant::now(),
+            written: 0,
+        };
+        log.line(&format!(
+            "=== Birdman64 {} controller log ===",
+            env!("CARGO_PKG_VERSION")
+        ));
+        Some(log)
+    }
+
+    fn line(&mut self, text: &str) {
+        use std::io::Write;
+        if self.written > Self::MAX_BYTES {
+            return;
+        }
+        let t = self.start.elapsed().as_millis();
+        let l = format!("[{t:>8} ms] {text}\n");
+        self.written += l.len();
+        let _ = self.file.write_all(l.as_bytes());
+    }
+
+    fn pad_info(&mut self, id: gilrs::GamepadId, g: &gilrs::Gamepad) {
+        let uuid: String = g.uuid().iter().map(|b| format!("{b:02x}")).collect();
+        self.line(&format!(
+            "pad {id}: name={:?} os_name={:?} vendor={:04x?} product={:04x?} uuid={uuid} \
+             mapping={:?} connected={}",
+            g.name(),
+            g.os_name(),
+            g.vendor_id(),
+            g.product_id(),
+            g.mapping_source(),
+            g.is_connected()
+        ));
+    }
+
+    fn event(&mut self, ev: &gilrs::Event) {
+        self.line(&format!("pad {}: {:?}", ev.id, ev.event));
+    }
+
+    fn pads(&mut self, pads: &[(usize, String, Pad)]) {
+        for (id, name, p) in pads {
+            self.line(&format!(
+                "N64 pad from gamepad {id} ({name}): buttons={:#06x} stick=({}, {})",
+                p.button, p.stick_x, p.stick_y
+            ));
+        }
+    }
 }
 
 /// (Re)sets the active pad from a gilrs handle.
@@ -2563,6 +2721,15 @@ mod tests {
         assert_eq!(key_mapping(KeyCode::Space), Some((CONT_A, 0, 0)));
         assert_eq!(key_mapping(KeyCode::KeyW), Some((0, 0, 1)));
         assert_eq!(key_mapping(KeyCode::KeyX), None);
+    }
+
+    #[test]
+    fn eightbitdo64_c_axes() {
+        assert_eq!(eightbitdo64_c_from_axes(-1.0, 0.0), CONT_C_UP);
+        assert_eq!(eightbitdo64_c_from_axes(1.0, 0.0), CONT_C_DOWN);
+        assert_eq!(eightbitdo64_c_from_axes(0.0, -1.0), CONT_C_LEFT);
+        assert_eq!(eightbitdo64_c_from_axes(0.0, 1.0), CONT_C_RIGHT);
+        assert_eq!(eightbitdo64_c_from_axes(0.0, 0.0), 0);
     }
 
     #[test]
