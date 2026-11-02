@@ -62,6 +62,11 @@ extern u16 D_8036957E;                 /* the test's class */
 extern Unk803599D0 D_803694D0;         /* fuel burn vs. throttle */
 extern Unk802D3658_Unk111C D_80369070; /* collision capsules: [0] body, [1] rotor */
 
+extern Unk803599D0 D_80368880;
+extern s32 D_8034F380;
+extern s32 D_8034F384;
+
+
 /* Rust (pw64_game::set_plane, also live from the settings screen): which
  * aircraft the gyrocopter slot flies from the next test start:
  * PW64_PLANE_OFF (the gyrocopter), PW64_PLANE_BIG (model 39, or 27 where the
@@ -72,7 +77,7 @@ int pw64_plane = PW64_PLANE_OFF;
  * cleared by pw64_plane_end. */
 int pw64_plane_run = 0;
 
-s32 sFlapMode = 0;
+static s32 sFlapMode = 0;
 
 /* ------------------------------------------------------------------------ */
 /* Models                                                                    */
@@ -1057,7 +1062,21 @@ void pw64_plane_movement_frame(GyrocopterData* gcData, u8 gameState) {
                 }
                 if (buttons & B_BUTTON) {
                     gcData->unkB0 -= gcData->unk64C * D_8034F854;
-                } if (demoButtonPress(gcData->contIdx, U_JPAD)) { sFlapMode += 1; if (sFlapMode >= 3) { sFlapMode = 0; }}
+                }
+                
+                // Activate next flap mode
+                if (demoButtonPress(gcData->contIdx, U_JPAD)) {
+                    if (sFlapMode < 2) {
+                        sFlapMode += 1;
+                    }
+                }
+
+                // Activate previous flap mode
+                if (demoButtonPress(gcData->contIdx, D_JPAD)) {
+                    if (sFlapMode > 0) {
+                        sFlapMode -= 1;
+                    }
+                }
 
                 // if (!(buttons & (A_BUTTON | B_BUTTON))) { //     if (gcData->unkB0 > 0.5f) { //         gcData->unkB0 -= gcData->unk650 * D_8034F854;
                 //         if (gcData->unkB0 < 0.5f) {
@@ -1241,7 +1260,8 @@ void pw64_plane_movement_frame(GyrocopterData* gcData, u8 gameState) {
             hud->unk8C = gcData->unk19C.z * 16.0f * 0.7f;
             hud->altitude = gcData->unkDC * 0.7f;
             hud->altSeaLevel = gcData->unk10.m[3][2] * 0.7f;
-            hud->speed = gcData->unk1A8 * 3.6f * 0.7f; hud->flapMode = sFlapMode;
+            hud->speed = gcData->unk1A8 * 3.6f * 0.7f;
+
             if (hud->fuel > 0.0f) {
                 hud->power = gcData->unkB4;
             } else {
@@ -1293,4 +1313,32 @@ void pw64_plane_movement_frame(GyrocopterData* gcData, u8 gameState) {
             fdr_802E65AC(&gcData->unk10, &D_80362690->terraId, &xAxisInput, &yAxisInput, &buttons);
         }
     }
+}
+
+// Draws the flap mode text
+void pw64_plane_draw_hud(void) {
+    const char* str = "";
+    switch (sFlapMode) {
+        case 0:
+        str = "TAKE OFF";
+        break;
+        case 1:
+        str = "CRUISE";
+        break;
+        case 2:
+        str = "LAND";
+        break;
+    }
+
+    s32 half = (s32) (SCREEN_WIDTH / 2);
+    pw64_hud_anchor_xy(half, 37);
+    pw64_hud_element(PW64_HUD_FLAPS); // PW64: movable HUD
+
+    uvFontSet(6);
+    uvFontColor(10, 10, 0xFF, 0xFF);
+    uvFontScale(0.5f, 0.5f);
+
+    uvFontPrintStr(half - 30, 37, "FLAPS");
+    uvFontScale(0.5f, 0.5f);
+    uvFontPrintStr(half + 5, 37, str);
 }

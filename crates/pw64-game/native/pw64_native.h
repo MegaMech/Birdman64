@@ -298,6 +298,7 @@ int pw64_plane_props(struct GyrocopterData* gc);
 int pw64_plane_pose(struct GyrocopterData* gc);
 int pw64_plane_rest(struct GyrocopterData* gc);
 void pw64_plane_movement_frame(struct GyrocopterData* gcData, unsigned char gameState);
+void pw64_plane_draw_hud(void);
 /* Split-screen: player 2's pilot (native/src/pw64_split.c), -1 = player
  * 1's. Set by the pilot select's second pass (game.c.patch) or, on a
  * PW64_START boot, by PW64_P2_PILOT (pw64-platform start.rs). */
