@@ -24,6 +24,53 @@ The decompiled C compiles on first build (with zig, the same compiler the
 release uses on players' machines); you need your own US ROM to actually
 play, never committed.
 
+## Changing the game's C code (patches)
+
+The decompiled game lives in the read-only `decomp/` submodule; never edit it.
+Our changes to it are **patches**, applied at build time (and, in the release,
+on the player's machine after the decomp is downloaded):
+
+- `crates/pw64-game/patches/<path under decomp>.patch`, one per decomp file,
+  for `src/**.c` and `include/**.h` (e.g. `patches/src/app/hud.c.patch`).
+- New code that doesn't have to live inside a decomp file goes in
+  `crates/pw64-game/native/` instead (e.g. `native/src/pw64_plane.c`, declared
+  in `native/pw64_native.h`). Keep patch hunks small: a hook call into native
+  code, not a whole feature. Keep new state in native code as well: adding a
+  field to a decomp struct means patching its header and shifting every
+  user of the struct.
+- Mark changes with a `PW64:` comment saying why.
+
+**To change a decomp file:**
+
+1. Copy the original (e.g. `decomp/src/app/hud.c`) to two scratch
+   directories as `a/src/app/hud.c` and `b/src/app/hud.c`, with LF line
+   endings (the checkout may be CRLF).
+2. Edit the `b/` copy.
+3. From the directory holding `a/` and `b/`, run
+   `git -c core.autocrlf=false diff --no-index --no-prefix a/src/app/hud.c b/src/app/hud.c`
+   and drop the `diff` and `index` lines, so the header reads
+   `--- a/src/app/hud.c` / `+++ b/src/app/hud.c`.
+4. Merge the new hunks into the existing patch file, or save it as a new
+   `.patch` under the path above. Hunks must apply in order against the
+   **pristine** file, not against another patch's output.
+5. `cargo build -p pw64-game` applies every patch; a hunk that doesn't apply
+   is reported with its file name.
+
+Notes:
+
+- Don't use GNU `patch` or `git apply` to test: our applier is strict (no
+  fuzz, line endings ignored) and is the only one that counts. GNU `patch`
+  rejects some of our patches.
+- `cargo test --workspace` also checks every patch against the first-run
+  builder's patch format (`pw64-cbuild`, `ops_vs_patches`), so a patch that
+  builds locally but breaks the release build is caught in CI.
+- The release builds the game from the downloaded decomp, so CI has a
+  "First-run game build" job: if only that job and the build jobs fail, a
+  patch or native file doesn't compile.
+- Patches only exist for the native build, so no `#ifdef` guard is needed.
+- Native code must also build on Windows, Linux, macOS, iOS and Android; CI
+  covers all of them.
+
 ## Legal rules (non-negotiable)
 
 - Never commit, upload, or attach **ROM data or extracted game assets** to a

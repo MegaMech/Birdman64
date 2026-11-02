@@ -27,7 +27,7 @@
 +        func_80307BAC(gcData);
 +        func_80307EA8(gcData);
 +    }
- 
+
      switch (gcData->unkC0) {
      case 0:
 -        func_80304738(gcData);
