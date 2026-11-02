@@ -184,7 +184,8 @@ static ParsedUVMD* plane_model_loaded(s32 modelId) {
 
 #define AP_WIND_STRENGTH 1.5f
 
-#define AP_FUEL_DRAIN_MULTIPLIER 1.0f
+#define FUEL_MULT_MIN 0.4f  // drain multiplier at idle/low throttle
+#define FUEL_MULT_MAX 4.0f
 
 /* func_8030399C tumbles the vehicle past |pitch| 0.803 or |roll| 1.065:
  * the rates stop short of that. */
@@ -259,6 +260,7 @@ static void flap_params_for(s32 mode, FlapParams* out) {
 /* Snap to the current mode (test start / replay). */
 static void plane_flap_reset(GyrocopterData* gcData) {
     flap_params_for(sFlapMode, &sFlap);
+    PW64_REG(sFlap);
 }
 
 /* Ease toward the current mode, once per physics frame. */
@@ -524,21 +526,13 @@ static void plane_engine(GyrocopterData* gcData) {
         }
     }
     if ((gcData->fuel > 0.0f) && gcData->usingFuel) {
-        f32 throttle = gcData->unkB4;
-        f32 fuelMultiplier = AP_FUEL_DRAIN_MULTIPLIER;
-
-        if (throttle > 0.965f) {
-            // Above 90%: very fast fuel consumption
-            fuelMultiplier = 2.5f + (throttle - 0.5f) * 8.0f;
-        } else if (throttle > 0.5f) {
-            // Above 50%: moderately faster fuel consumption
-            fuelMultiplier = 0.4f + (throttle - 0.5f) * 1.50f;
-        } else {
-            fuelMultiplier = 0.4f;
-        }
+        f32 throttle = ap_clamp(gcData->unkB4, 0.0f, 1.0f);
+        f32 t2 = throttle * throttle;
+        f32 t4 = t2 * t2;
+        f32 t8 = t4 * t4; // throttle^8, no powf needed
+        f32 fuelMultiplier = FUEL_MULT_MIN + (FUEL_MULT_MAX - FUEL_MULT_MIN) * t8;
 
         gcData->fuel -= func_80313F08(&D_803694D0, throttle) * fuelMultiplier * D_8034F854;
-        //gcData->fuel -= func_80313F08(&D_803694D0, gcData->unkB4) * D_8034F854;
         if (gcData->fuel <= 0.0f) {
             gcData->usingFuel = FALSE;
         }
@@ -990,6 +984,7 @@ void pw64_plane_movement_frame(GyrocopterData* gcData, u8 gameState) {
         func_802F764C(gcData);
         return;
     }
+
     if (fdr_802E6B5C() != 4) {
         shadow_803343D8(1);
 
